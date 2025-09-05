@@ -11,14 +11,18 @@ export const createBooking = async ({}) => {
     })
 }
 
-export const getBookingById = async({id}) => {
+export const getBookingById = async(token, id) => {
     return await fetch(`${import.meta.env.VITE_API_PATH}/bookings/${id}`,)
-    method: GET
+    method: 'GET',
+    headers: {
+        'Accept': 'application/json',
+        Authorization: token
+    }
 }
 
 export const updateBookingStatus = async ({id, status}) => {
     return await fetch(`${import.meta.env.VITE_API_PATH}/bookings/${id}`,{
-        method: PATCH,
+        method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -30,33 +34,51 @@ export const updateBookingStatus = async ({id, status}) => {
 }
 
 
-export const getTerminals = async() => {
+export const getTerminals = async(token) => {
     return await fetch(`$import.meta.env.VITE_API_PATH/terminals`,{
-        method: GET
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'Authorization': token
+        }
     })
 }
 
 export const searchSchedules = async() => {
     return await fetch(`$import.meta.env.VITE_API_PATH/schedules/search`, {
-
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'Authorization': token
+        }
     })
 }
 
 
-export const getScheduleById = async({id}) => {
+export const getScheduleById = async(token, {id}) => {
     return await fetch(`$import.meta.env.VITE_API_PATH`/schedules/${id}, {
-        method: GET
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'Authorization': token
+        }
     })
 }
 
-export const getBusSeats = async({busId, scheduleId}) => {
-    return await fetch(`$import.meta.env.VITE_API_PATH/seats/${scheduleId}`)
+export const getBusSeats = async(token, {busId, scheduleId}) => {
+    return await fetch(`$import.meta.env.VITE_API_PATH/seats/${scheduleId}`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'Authorization': token
+        }
+    })
 }
 
 
 export const createPayment = async({}) => {
     return await fetch(`$import.meta.env.VITE_API_PATH/payments`, {
-        method: POST,
+        method: 'POST',
         headers: {
             Content-Type: 'application/json',
             Accept: 'application/json'
@@ -67,9 +89,13 @@ export const createPayment = async({}) => {
     })
 }
 
-export const getPaymentMethods = async({}) => {
+export const getPaymentMethods = async(token) => {
     return await patch(`$import.meta.env.VITE_API_PATH/payments/methods`,{
-        method: GET
+        method: GET,
+        headers: {
+            'Accept': 'application/json',
+            'Authorization': token
+        }
     })
 }
 
