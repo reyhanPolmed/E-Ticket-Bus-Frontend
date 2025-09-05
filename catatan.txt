@@ -1,0 +1,100 @@
+export const createBooking = async ({}) => {
+    return await fetch(`${import.meta.env.VITE_API_PATH}/bookings`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+            
+        })
+    })
+}
+
+export const getBookingById = async({id}) => {
+    return await fetch(`${import.meta.env.VITE_API_PATH}/bookings/${id}`,)
+    method: GET
+}
+
+export const updateBookingStatus = async ({id, status}) => {
+    return await fetch(`${import.meta.env.VITE_API_PATH}/bookings/${id}`,{
+        method: PATCH,
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+
+        })
+    })
+}
+
+
+export const getTerminals = async() => {
+    return await fetch(`$import.meta.env.VITE_API_PATH/terminals`,{
+        method: GET
+    })
+}
+
+export const searchSchedules = async() => {
+    return await fetch(`$import.meta.env.VITE_API_PATH/schedules/search`, {
+
+    })
+}
+
+
+export const getScheduleById = async({id}) => {
+    return await fetch(`$import.meta.env.VITE_API_PATH`/schedules/${id}, {
+        method: GET
+    })
+}
+
+export const getBusSeats = async({busId, scheduleId}) => {
+    return await fetch(`$import.meta.env.VITE_API_PATH/seats/${scheduleId}`)
+}
+
+
+export const createPayment = async({}) => {
+    return await fetch(`$import.meta.env.VITE_API_PATH/payments`, {
+        method: POST,
+        headers: {
+            Content-Type: 'application/json',
+            Accept: 'application/json'
+        },
+        body: JSON.Stringify({
+
+        })
+    })
+}
+
+export const getPaymentMethods = async({}) => {
+    return await patch(`$import.meta.env.VITE_API_PATH/payments/methods`,{
+        method: GET
+    })
+}
+
+export verifyPayment = async({}) => {
+    return await fetch(`$iimport.meta.env.VITE_API_PATH/payments/${paymentId/verify}`, {
+        method: POST,
+        headers: {
+            Content-Type: 'application/json',
+            Accept: 'application/json'
+        },
+        body: JSON.Stringify({
+
+        })
+    })
+}
+
+
+
+
+
+import bookingApi from "./bookingApi.js
+
+const handleSubmit = async() => {
+    const response = await bookingApi({
+        username: username,
+        password: password
+    })
+}
