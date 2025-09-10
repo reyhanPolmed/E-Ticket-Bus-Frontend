@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  @apply font-roboto-mono;
+}
+
+@layer components {
+  .neobrutalism-border {
+    @apply border-[4px] border-black;
+  }
+}

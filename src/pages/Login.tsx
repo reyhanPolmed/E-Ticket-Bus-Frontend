@@ -1,12 +1,18 @@
 import React from "react";
 import { useState } from "react";
 import { LoginUser } from "../api/authApi";
+import { setCredential } from "../features/user/AuthSlice";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
+
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [showModal, setShowModal] = useState(false);
-
+  
+  const dispatch = useDispatch()
+  const navigate = useNavigate()
   // Function to show the modal
   const showMessage = (msg: string) => {
     setMessage(msg);
@@ -25,9 +31,11 @@ const Login: React.FC = () => {
     // Authentication logic goes here
     const response = await LoginUser(email, password)
     const responseBody = await response.json()
-    if(response) {
-        console.log(responseBody)
+    console.log(responseBody)
+    if(responseBody.success == true) {
+        dispatch(setCredential({...responseBody}))
         showMessage("Login berhasil! (Ini hanya demo)");
+        navigate('/')
     } else {
         showMessage("login gagal!")
     }

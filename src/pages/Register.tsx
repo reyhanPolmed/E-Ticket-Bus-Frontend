@@ -1,6 +1,7 @@
 import React from "react";
 import { useState } from "react";
 import { RegisterUser } from "../api/authApi";
+import { useNavigate } from "react-router-dom";
 
 const Register: React.FC = () => {
   const [firstName, setFirstName] = useState("");
@@ -11,6 +12,7 @@ const Register: React.FC = () => {
   const [message, setMessage] = useState("");
   const [showModal, setShowModal] = useState(false);
 
+  const navigate = useNavigate()
   // Function to show the modal
   const showMessage = (msg: string) => {
     setMessage(msg);
@@ -29,9 +31,10 @@ const Register: React.FC = () => {
     // Logic to handle user registration
     const response = await RegisterUser(email, firstName, lastName, password, phone);
     const responseBody = await response.json()
-    if(response) {
+    if(responseBody.status === "success") {
         console.log(responseBody)
         showMessage("Registrasi berhasil! (Ini hanya demo)");
+        navigate('/login')
     } else {
         showMessage("register gagal!")
     }
