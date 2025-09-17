@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-
+// import { useSelector } from 'react-redux';
+// import { type RootState } from '../features/store';
 // --- Komponen Ikon Pin ---
 // Menggunakan SVG inline agar tidak perlu file eksternal
 
@@ -46,15 +47,16 @@ interface TerminalDropdownProps {
   Terminals: Terminal[];
   label: string;
   placeholder: string;
+  onSelect: (value: string) => void;
 }
 
 // --- Komponen Utama Dropdown ---
-const TerminalDropdown: React.FC<TerminalDropdownProps> = ({Terminals, label, placeholder}) => {
+const TerminalDropdown: React.FC<TerminalDropdownProps> = ({Terminals, label, placeholder, onSelect}) => {
     // State untuk mengontrol status buka/tutup dropdown
     const [isOpen, setIsOpen] = useState(false);
-    
-    // State untuk menyimpan terminal yang dipilih
+
     const [selectedTerminal, setSelectedTerminal] = useState<Terminal | null>(null);
+
 
     // Ref untuk mendeteksi klik di luar komponen
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -82,7 +84,8 @@ const TerminalDropdown: React.FC<TerminalDropdownProps> = ({Terminals, label, pl
 
     // --- Fungsi untuk Menangani Pemilihan Opsi ---
     const handleSelectTerminal = (terminal: Terminal) => {
-        setSelectedTerminal(terminal); // Set terminal yang dipilih
+        onSelect(terminal.name); // Set terminal yang dipilih
+        setSelectedTerminal(terminal)
         setIsOpen(false); // Tutup dropdown
     };
 

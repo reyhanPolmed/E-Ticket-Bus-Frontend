@@ -1,5 +1,5 @@
 export const searchSchedules = async (
-  token: string,
+  // token: string,
   {
     date,
     origin,
@@ -18,7 +18,7 @@ export const searchSchedules = async (
       method: "GET",
       headers: {
         Accept: "application/json",
-        Authorization: token,
+        // Authorization: token,
       },
     }
   );

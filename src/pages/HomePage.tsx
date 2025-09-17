@@ -2,9 +2,32 @@ import type React from "react";
 import { getTerminals } from "../api/terminalApi";
 import { useEffect, useState } from "react";
 import TerminalDropdown from "../components/TerminalDropdown";
-
+import TanggalKeberangkatanPicker from "../components/KalenderSelection";
+import { useDispatch, useSelector } from "react-redux";
+import { setOrigin, setDestination } from "../features/search/searchSlice";
+import { searchSchedules } from "../api/scheduleApi";
+import { type RootState } from "../features/store";
 const HomePage: React.FC = () => {
+  const dispatch = useDispatch()
   const [Terminals, setTerminal] = useState([]);
+
+  const handleSelectOrigin = (terminal: string) => {
+    dispatch(setOrigin(terminal))
+  }
+
+  const {departureDate, origin, destination} = useSelector((state: RootState) => state.search)
+
+  const handleSelectDestination = (terminal: string) => {
+    dispatch(setDestination(terminal))
+  }
+
+  const handleSearchSchedules = async(e: { preventDefault: () => void; }) => {
+    e.preventDefault()
+    const response = await searchSchedules({date: departureDate, origin, destination});
+    const responseBody = await response.json();
+    const schedules = responseBody.data;
+    console.log(schedules)
+  }
 
   async function fetchTerminals() {
     const response = await getTerminals();
@@ -23,6 +46,7 @@ const HomePage: React.FC = () => {
   useEffect(() => {
     fetchTerminals().then(() => console.log("terminal fetched"));
   }, []);
+
   return (
     <main className="container mx-auto mt-6 p-8">
       <div className="bg-yellow-400 p-8 neobrutalism-border shadow-neobrutalism">
@@ -41,17 +65,19 @@ const HomePage: React.FC = () => {
               Terminals={Terminals}
               label="Terminal Asal"
               placeholder="Pilih Terminal Asal"
+              onSelect={handleSelectOrigin}
             />
             <TerminalDropdown
               Terminals={Terminals}
               label="Terminal Tujuan"
               placeholder="Pilih Terminal Tujuan"
+              onSelect={handleSelectDestination}
             />
           </div>
 
           {/* <!-- Kolom Tanggal Keberangkatan --> */}
           <div>
-            <label className="block text-sm font-bold mb-2">
+            {/* <label className="block text-sm font-bold mb-2">
               Tanggal Keberangkatan
             </label>
             <div className="relative">
@@ -63,12 +89,14 @@ const HomePage: React.FC = () => {
               <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500">
                 📅
               </span>
-            </div>
+            </div> */}
+            <TanggalKeberangkatanPicker />
           </div>
 
           {/* <!-- Tombol Cari Jadwal --> */}
           <button
             type="submit"
+            onClick={handleSearchSchedules}
             className="w-full bebas-neue text-2xl bg-indigo-600 text-white py-4 neobrutalism-border shadow-neobrutalism-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all duration-200"
           >
             CARI JADWAL
