@@ -16,7 +16,7 @@ const PrivateRoutes = () => {
       <Routes>
         <Route element={<RequireAuth />}>
           <Route path="/" element={<HomePage />} />
-          <Route path="/search" element={<SearchResult />} />
+          <Route path="/result" element={<SearchResult />} />
           <Route path="/seat" element={<SeatSelection />} />
           <Route path="/passenger-info" element={<PassengerInfo />} />
           <Route path="/confirmation" element={<BookingConfirmation />} />

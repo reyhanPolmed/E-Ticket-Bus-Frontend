@@ -96,7 +96,8 @@ const handleDateClick = (day: number | null) => {
   const daysOfWeek: string[] = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
   // Handler untuk navigasi ke bulan berikutnya
-  const handleNextMonth = () => {
+  const handleNextMonth = (e: { preventDefault: () => void; }) => {
+    e.preventDefault()
     if (currentMonth === 11) {
       setCurrentMonth(0);
       setCurrentYear(currentYear + 1);
@@ -106,7 +107,8 @@ const handleDateClick = (day: number | null) => {
   };
 
   // Handler untuk navigasi ke bulan sebelumnya
-  const handlePrevMonth = () => {
+  const handlePrevMonth = (e: { preventDefault: () => void; }) => {
+    e.preventDefault()
     if (currentMonth === 0) {
       setCurrentMonth(11);
       setCurrentYear(currentYear - 1);
