@@ -10,7 +10,7 @@ const Header: React.FC = () => {
         dispatch(logOut())
     }
     return (
-    <header className="bg-black text-white py-4 px-8 bebas-neue neobrutalism-border">
+    <header className="bg-black text-white py-4 px-8 bebas-neue neobrutalism-border z-30">
         <div className="container mx-auto flex justify-between items-center">
             <Link to="/" className="text-3xl font-bold tracking-widest">BUSTICKETS</Link>
             <nav className="space-x-8 text-xl">
