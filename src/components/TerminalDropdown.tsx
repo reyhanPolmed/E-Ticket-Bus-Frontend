@@ -1,31 +1,45 @@
-import React, { useState, useEffect, useRef } from 'react';
-// import { useSelector } from 'react-redux';
-// import { type RootState } from '../features/store';
-// --- Komponen Ikon Pin ---
-// Menggunakan SVG inline agar tidak perlu file eksternal
+import { useState, useRef, useEffect } from "react";
 
-interface Terminal {
-  id: string;
+interface TerminalDropdownProps {
+  Terminals: Terminal[];
+  label: string;
+  placeholder: string;
+  onSelect: (terminal: Terminal) => void;
+}
+type Terminal = {
+  id: number;
   name: string;
-  code: string;
-  address: string;
   city: string;
-  province: string;
-  latitude: string;
-  longitude: string;
-  status: 'active' | 'inactive'; // Menggunakan union type untuk status yang lebih spesifik
-  
-  // Atribut ini adalah string yang berisi JSON, perlu di-parse
-  facilities: string; // Setelah di-parse akan menjadi: string[]
-  
-  // Atribut ini juga string yang berisi JSON
-  operatingHours: string; // Setelah di-parse akan menjadi: OperatingHours
-  
-  // Atribut tanggal dalam format ISO string
-  createdAt: string;
-  updatedAt: string;
 };
+const TerminalDropdown: React.FC<TerminalDropdownProps> = ({
+  Terminals,
+  label,
+  placeholder,
+  onSelect,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedTerminal, setSelectedTerminal] = useState<Terminal | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () =>
+      document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelectTerminal = (terminal: Terminal) => {
+    onSelect(terminal);
+    setSelectedTerminal(terminal);
+    setIsOpen(false);
+  };
 const PinIcon = () => (
     <svg 
         xmlns="http://www.w3.org/2000/svg" 
@@ -42,90 +56,40 @@ const PinIcon = () => (
         <circle cx="12" cy="10" r="3"></circle>
     </svg>
 );
+  return (
+    <div ref={dropdownRef} className="relative w-full">
+      {label && (
+        <label className="block text-black text-sm font-bold mb-2">
+          {label}
+        </label>
+      )}
 
-interface TerminalDropdownProps {
-  Terminals: Terminal[];
-  label: string;
-  placeholder: string;
-  onSelect: (value: string) => void;
-}
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full bg-white border-2 border-black rounded-md p-3 text-left flex justify-between items-center"
+      >
+        <span className={selectedTerminal ? "text-black" : "text-gray-400"}>
+          {selectedTerminal ? selectedTerminal.name : placeholder}
+        </span>
+        <PinIcon />
+      </button>
 
-// --- Komponen Utama Dropdown ---
-const TerminalDropdown: React.FC<TerminalDropdownProps> = ({Terminals, label, placeholder, onSelect}) => {
-    // State untuk mengontrol status buka/tutup dropdown
-    const [isOpen, setIsOpen] = useState(false);
-
-    const [selectedTerminal, setSelectedTerminal] = useState<Terminal | null>(null);
-
-
-    // Ref untuk mendeteksi klik di luar komponen
-    const dropdownRef = useRef<HTMLDivElement>(null);
-
-    // --- Simulasi Fetch Data ---
-    // Gunakan useEffect untuk mengisi data terminal sekali saat komponen dimuat
-
-    // --- Logika untuk Menutup Dropdown saat Klik di Luar ---
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
-        };
-
-        // Tambahkan event listener saat komponen dimuat
-        document.addEventListener('mousedown', handleClickOutside);
-
-        // Hapus event listener saat komponen akan di-unmount
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, []);
-
-
-    // --- Fungsi untuk Menangani Pemilihan Opsi ---
-    const handleSelectTerminal = (terminal: Terminal) => {
-        onSelect(terminal.name); // Set terminal yang dipilih
-        setSelectedTerminal(terminal)
-        setIsOpen(false); // Tutup dropdown
-    };
-
-    return (
-        // Container utama dengan background kuning seperti pada gambar              
-        <div ref={dropdownRef} className="relative w-full">
-            {/* Menggunakan prop 'label' yang dinamis */}
-            <label className="block text-black text-sm font-bold mb-2">
-                {label}
-            </label>
-
-            {/* Tombol utama dropdown */}
-            <button
-                type="button" 
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full bg-white border-2 border-black rounded-md p-3 text-left flex justify-between items-center focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
+      {isOpen && (
+        <ul className="absolute z-10 w-full mt-1 bg-white border-2 border-black rounded-md shadow-lg">
+          {Terminals.map((terminal) => (
+            <li
+              key={terminal.id}
+              onClick={() => handleSelectTerminal(terminal)}
+              className="p-3 hover:bg-yellow-100 cursor-pointer"
             >
-                <span className={selectedTerminal ? 'text-black' : 'text-gray-400'}>
-                    {/* Menggunakan prop 'placeholder' yang dinamis */}
-                    {selectedTerminal ? selectedTerminal.name : placeholder}
-                </span>
-                <PinIcon />
-            </button>
-
-            {/* Daftar Opsi Dropdown */}
-            {isOpen && (
-                <ul className="absolute z-10 w-full mt-1 bg-white border-2 border-black rounded-md shadow-lg max-h-60 overflow-y-auto">
-                    {Terminals.map((terminal) => (
-                        <li
-                            key={terminal.id}
-                            onClick={() => handleSelectTerminal(terminal)}
-                            className="p-3 hover:bg-yellow-100 cursor-pointer text-gray-800"
-                        >
-                            {terminal.name}
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </div>
-    );
+              {terminal.name}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 };
 
 export default TerminalDropdown;

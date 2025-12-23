@@ -3,7 +3,7 @@
 import React from "react"
 import { Link } from "react-router-dom"
 import { useDispatch } from "react-redux"
-import { logOut } from "../../features/user/AuthSlice" 
+import { logOut } from "../../features/auth/AuthSlice" 
 const Header: React.FC = () => {
     const dispatch = useDispatch()
     const handleLogout = () => {

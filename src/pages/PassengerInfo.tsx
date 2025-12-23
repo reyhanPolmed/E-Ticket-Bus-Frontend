@@ -1,90 +1,128 @@
-import React from "react";
-// import { ArrowLeft, User, Phone, Mail, CreditCard } from "lucide-react"
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Trash2, ArrowRight } from "lucide-react";
+
+import { useAppDispatch, useAppSelector } from "../features/hooks";
+import {
+  setPassengerData,
+  setBookingStep,
+} from "../features/booking/bookingSlice";
+
+import type { Passenger } from "../features/booking/bookingTypes";
 
 const PassengerInfo: React.FC = () => {
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+
+  const { selectedSeats } = useAppSelector((state) => state.booking);
+
+  const [passengers, setPassengers] = useState<Passenger[]>(
+    selectedSeats.map((seat) => ({
+      name: "",
+      age: 0,
+      seatNumber: seat.seatNumber,
+    }))
+  );
+
+  const handleChange = (
+    index: number,
+    field: keyof Passenger,
+    value: string
+  ) => {
+    const updated = [...passengers];
+    updated[index] = {
+      ...updated[index],
+      [field]: field === "age" ? Number(value) : value,
+    };
+    setPassengers(updated);
+  };
+
+  const addPassenger = () => {
+    setPassengers([
+      ...passengers,
+      { name: "", age: 0, seatNumber: "3" },
+    ]);
+  };
+
+  const removePassenger = () => {
+    if (passengers.length > 1) {
+      setPassengers(passengers.slice(0, -1));
+    }
+  };
+
+  const handleConfirm = () => {
+    const isValid = passengers.every(
+      (p) => p.name.trim() && p.age > 0
+    );
+
+    if (!isValid) {
+      alert("Lengkapi data semua penumpang!");
+      return;
+    }
+
+    dispatch(setPassengerData(passengers));
+    dispatch(setBookingStep("payment"));
+    navigate("/payment");
+  };
+
   return (
-    <main className="flex-1 px-4 sm:px-6 lg:px-20 xl:px-40 py-8">
-      <div className="mx-auto max-w-4xl">
-        <h1 className="text-4xl font-bold text-black mb-6">Booking Details</h1>
-        <div className="bg-white border-2 neobrutalism-border rounded-lg p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mb-10">
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="md:w-1/3 h-48 md:h-auto rounded-lg overflow-hidden border-2 neobrutalism-border">
-              <div className="w-full h-full bg-center bg-no-repeat bg-cover"></div>
-            </div>
-            <div className="flex-1 flex flex-col justify-center">
-              <h2 className="text-2xl font-bold text-black mb-2">
-                Flight to New York
-              </h2>
-              <p className="text-black/70 mb-1">
-                Departure: 2024-07-15, 10:00 AM
-              </p>
-              <p className="text-black/70">Arrival: 2024-07-15, 02:00 PM</p>
-            </div>
+    <main className="min-h-screen p-6 bg-gray-100">
+      <h1 className="text-4xl font-black uppercase mb-6">
+        Data Penumpang
+      </h1>
+
+      <div className="space-y-6">
+        {passengers.map((p, i) => (
+          <div
+            key={i}
+            className="bg-white border-4 border-black p-6"
+          >
+            <h2 className="font-black mb-4">Penumpang {i + 1}</h2>
+
+            <input
+              className="w-full border-2 border-black p-2 mb-3"
+              placeholder="Nama Lengkap"
+              value={p.name}
+              onChange={(e) =>
+                handleChange(i, "name", e.target.value)
+              }
+            />
+
+            <input
+              className="w-full border-2 border-black p-2"
+              type="number"
+              placeholder="Umur"
+              value={p.age || ""}
+              onChange={(e) =>
+                handleChange(i, "age", e.target.value)
+              }
+            />
           </div>
-        </div>
-        <h2 className="text-3xl font-bold text-black mb-6">
-          Passenger Information
-        </h2>
-        <div className="flex gap-4 mb-8">
-          <button className="flex-1 sm:flex-none items-center justify-center rounded-lg h-12 px-6 bg-primary text-black text-base font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-yellow-400 transition-all border-2 neobrutalism-border">
-            Add Passenger
-          </button>
-          <button className="flex-1 sm:flex-none items-center justify-center rounded-lg h-12 px-6 bg-transparent text-black text-base font-bold hover:bg-gray-100 transition-all border-2 neobrutalism-border">
-            Remove Passenger
-          </button>
-        </div>
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-black pb-2">
-                Passenger 1 Name
-              </label>
-              <input
-                className="form-input flex w-full rounded-lg text-black bg-transparent focus:outline-none focus:ring-2 focus:ring-primary border-2 neobrutalism-border h-14 placeholder:text-black/50 p-4 text-base font-normal"
-                id="passenger1-name"
-                placeholder="Enter name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-black pb-2">
-                Passenger 1 Age
-              </label>
-              <input
-                className="form-input flex w-full rounded-lg text-black bg-transparent focus:outline-none focus:ring-2 focus:ring-primary border-2 neobrutalism-border h-14 placeholder:text-black/50 p-4 text-base font-normal"
-                id="passenger1-age"
-                placeholder="Enter age"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-black pb-2">
-                Passenger 2 Name
-              </label>
-              <input
-                className="form-input flex w-full rounded-lg text-black bg-transparent focus:outline-none focus:ring-2 focus:ring-primary border-2 neobrutalism-border h-14 placeholder:text-black/50 p-4 text-base font-normal"
-                id="passenger2-name"
-                placeholder="Enter name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-black pb-2">
-                Passenger 2 Age
-              </label>
-              <input
-                className="form-input flex w-full rounded-lg text-black bg-transparent focus:outline-none focus:ring-2 focus:ring-primary border-2 neobrutalism-border h-14 placeholder:text-black/50 p-4 text-base font-normal"
-                id="passenger2-age"
-                placeholder="Enter age"
-              />
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-end mt-10">
-          <button className="w-full sm:w-auto flex items-center justify-center rounded-lg h-14 px-8 bg-primary text-black text-lg font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-yellow-400 transition-all border-2 neobrutalism-border">
-            Confirm Booking
-          </button>
-        </div>
+        ))}
       </div>
+
+      <div className="flex gap-4 mt-8">
+        <button
+          onClick={addPassenger}
+          className="flex-1 bg-yellow-300 border-4 border-black p-3 font-black"
+        >
+          <Plus /> Tambah
+        </button>
+
+        <button
+          onClick={removePassenger}
+          className="flex-1 bg-red-400 border-4 border-black p-3 font-black"
+        >
+          <Trash2 /> Hapus
+        </button>
+      </div>
+
+      <button
+        onClick={handleConfirm}
+        className="w-full mt-8 bg-black text-white p-4 font-black flex justify-center gap-2"
+      >
+        Lanjut Pembayaran <ArrowRight />
+      </button>
     </main>
   );
 };
