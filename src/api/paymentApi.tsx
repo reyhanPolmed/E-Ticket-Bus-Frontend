@@ -1,31 +1,13 @@
-export const createPayment = async() => {
-    return await fetch(`${import.meta.env.VITE_API_PATH}/payments`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        },
-    })
-}
+import apiClient from "./apiClient";
 
-export const getPaymentMethods = async(token: string) => {
-    return await fetch(`${import.meta.env.VITE_API_PATH}/payments/methods`,{
-        method: 'GET',
-        headers: {
-            'Accept': 'application/json',
-            'Authorization': token
-        }
-    })
-}
+export const getPaymentMethods = async () => {
+    return apiClient.get("/payments/methods");
+};
 
-export const verifyPayment = async(token : string, paymentId: string) => {
-    return await fetch(`${import.meta.env.VITE_API_PATH}/payments/${paymentId}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': token
-        },
-    })
-}
- 
+export const createPayment = async (payload: {
+    bookingId: string;
+    method: string;
+    amount: number;
+}) => {
+    return apiClient.post("/payments", payload);
+};

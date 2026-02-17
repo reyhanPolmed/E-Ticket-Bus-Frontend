@@ -1,48 +1,20 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeft,
-  Clock,
-  Shield,
-  CreditCard,
-  Wallet,
-  Check,
-  Ticket,
-  ChevronRight,
-  Loader2,
-  Bus,
-  AlertTriangle
-} from "lucide-react";
-
 import { useAppDispatch, useAppSelector } from "../features/hooks";
-import {
-  setCurrentPayment,
-  setPaymentStatus,
-} from "../features/payment/paymentSlice";
+import { setCurrentPayment, setPaymentStatus } from "../features/payment/paymentSlice";
+import { createPayment } from "../api/paymentApi";
 
 const Payment: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  /* =====================
-      REDUX STATE (LOGIC TETAP)
-  ===================== */
-  const { passengerData, currentBooking } = useAppSelector(
-    (state) => state.booking
-  );
+  const { passengerData, currentBooking, bookingId } = useAppSelector((state) => state.booking);
   const { criteria } = useAppSelector((state) => state.search);
-  const { methods } = useAppSelector((state) => state.payment);
 
-  /* =====================
-      LOCAL UI STATE
-  ===================== */
-  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<number | null>(null);
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<number | null>(1); // Default to BCA
   const [isProcessing, setIsProcessing] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(900);
+  const [timeLeft, setTimeLeft] = useState(599); // 09:59
 
-  /* =====================
-      TIMER
-  ===================== */
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
@@ -50,37 +22,11 @@ const Payment: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  /* =====================
-      GUARD (NEOBRUTALIST STYLE)
-  ===================== */
-  if (!currentBooking || passengerData.length === 0) {
-    return (
-      <div className="min-h-screen bg-[#F0F0F0] flex items-center justify-center p-10">
-        <div className="bg-white border-4 border-black p-8 shadow-[8px_8px_0_0_#000] text-center">
-            <AlertTriangle className="mx-auto mb-4 w-12 h-12" />
-            <h2 className="font-black text-2xl uppercase">Data Booking Tidak Lengkap</h2>
-            <button 
-                onClick={() => navigate('/')}
-                className="mt-4 bg-black text-white px-6 py-2 font-bold uppercase hover:bg-gray-800"
-            >
-                Kembali ke Beranda
-            </button>
-        </div>
-      </div>
-    );
-  }
-
-  /* =====================
-      CALCULATION
-  ===================== */
-  const pricePerSeat = currentBooking.totalPrice; // Asumsi totalPrice di booking adalah per kursi, atau sesuaikan logic ini
-  const subtotal = passengerData.length * pricePerSeat;
-
-  const selectedMethod = methods.find(
-    (m) => m.id === selectedPaymentMethodId
-  );
-
-  const finalAmount = subtotal + (selectedMethod?.fee ?? 0);
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("id-ID", {
@@ -89,353 +35,368 @@ const Payment: React.FC = () => {
       minimumFractionDigits: 0,
     }).format(amount);
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  if (!currentBooking || passengerData.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background-light dark:bg-background-dark">
+        <h2 className="text-2xl font-bold mb-4 text-[#111318] dark:text-white">No Active Booking Found</h2>
+        <button
+          onClick={() => navigate('/')}
+          className="px-6 py-3 bg-primary text-white rounded-xl font-bold shadow-lg hover:bg-blue-700 transition-colors"
+        >
+          Back to Home
+        </button>
+      </div>
+    );
+  }
+
+  const pricePerSeat = parseFloat(currentBooking.totalPrice);
+  const subtotal = passengerData.length * pricePerSeat;
+  const serviceFee = 0;
+  const tax = 0;
+  const discount = 0;
+  const totalAmount = subtotal + serviceFee + tax - discount;
+
+  // Map payment method IDs to method names for API
+  const paymentMethodMap: Record<number, string> = {
+    1: "BCA",
+    2: "Mandiri",
+    3: "GoPay",
+    4: "OVO",
+    5: "Visa",
   };
 
-  /* =====================
-      HANDLER
-  ===================== */
-  const handlePayment = () => {
-    if (!selectedMethod) return;
-
+  const handlePayment = async () => {
+    if (!selectedPaymentMethodId || !bookingId) {
+      if (!bookingId) {
+        alert("No booking ID found. Please go back and try again.");
+        return;
+      }
+      return;
+    }
     setIsProcessing(true);
-
-    setTimeout(() => {
-      dispatch(
-        setCurrentPayment({
-          id: Date.now(),
-          amount: finalAmount,
-          methodId: selectedMethod.id,
-        })
-      );
-
+    try {
+      const response = await createPayment({
+        bookingId: bookingId,
+        method: paymentMethodMap[selectedPaymentMethodId] || "BCA",
+        amount: totalAmount,
+      });
+      console.log("Payment response:", response);
+      const paymentData = response.data?.data || response.data;
+      dispatch(setCurrentPayment({
+        id: paymentData.id || paymentData._id || String(Date.now()),
+        amount: totalAmount,
+        method: paymentMethodMap[selectedPaymentMethodId] || "BCA",
+        bookingId: bookingId,
+        status: "success",
+      }));
       dispatch(setPaymentStatus("success"));
-      navigate("/confirmation");
+      navigate("/success");
+    } catch (error: any) {
+      console.error("Payment failed:", error);
+      dispatch(setPaymentStatus("failed"));
+      alert(error.response?.data?.message || "Payment failed. Please try again.");
+    } finally {
       setIsProcessing(false);
-    }, 2000);
+    }
   };
 
-  // Helper untuk icon visual (karena data API mungkin tidak ada icon component)
-  const renderMethodIcon = (id: number) => {
-      // Logic sederhana: ID 1 biasanya bank/kartu, lainnya wallet. Sesuaikan ID dengan data riil.
-      return id === 1 ? <CreditCard size={32} /> : <Wallet size={32} />;
-  };
+  // Helper to get method ID by name for the UI sections
+  // Or we can just use the IDs we set in paymentSlice:
+  // 1: BCA, 2: Mandiri, 3: GoPay, 4: OVO, 5: Visa
 
-  /* =====================
-      RENDER (UI NEOBRUTALIST)
-  ===================== */
   return (
-    <div className="min-h-screen bg-[#F0F0F0] pb-12 font-sans selection:bg-black selection:text-white relative">
-      
-      {/* Pattern Background */}
-      <div className="fixed inset-0 z-0 opacity-10 pointer-events-none" 
-           style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
-      </div>
-
-      {/* --- TOP NAVIGATION / STEPPER --- */}
-      <div className="bg-white border-b-4 border-black sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="flex items-center gap-2 font-black uppercase hover:underline decoration-4 underline-offset-4"
-            >
-              <ArrowLeft size={24} strokeWidth={3} />
-              Kembali
-            </button>
-            
-            {/* Steps Indicator (Boxy) */}
-            <div className="flex items-center space-x-2">
-              <div className="flex items-center opacity-50 grayscale">
-                <span className="w-8 h-8 border-2 border-black bg-white flex items-center justify-center font-bold mr-2">1</span>
-                <span className="font-bold hidden sm:inline">KURSI</span>
-              </div>
-              <ChevronRight size={20} strokeWidth={3} className="text-black/30" />
-              <div className="flex items-center opacity-50 grayscale">
-                <span className="w-8 h-8 border-2 border-black bg-white flex items-center justify-center font-bold mr-2">2</span>
-                <span className="font-bold hidden sm:inline">DATA</span>
-              </div>
-              <ChevronRight size={20} strokeWidth={3} />
-              <div className="flex items-center text-black">
-                <span className="w-8 h-8 border-2 border-black bg-[#A3E635] flex items-center justify-center font-bold mr-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">3</span>
-                <span className="font-black underline decoration-4 decoration-[#A3E635] underline-offset-4">BAYAR</span>
-              </div>
-            </div>
-
-            <div className="w-20 hidden sm:block"></div>
-          </div>
-        </div>
-      </div>
-
-      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* --- HEADER & TIMER --- */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+    <div className="bg-background-light dark:bg-background-dark font-display text-[#111318] dark:text-white min-h-screen flex flex-col">
+      {/* Main Content Area */}
+      <main className="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Timer & Top Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
-            <h1 className="text-4xl md:text-5xl font-black text-black uppercase leading-none">
-              Checkout
-            </h1>
-            <p className="text-black font-bold mt-2 bg-white inline-block px-2 border-2 border-black">
-              SELESAIKAN PEMBAYARAN ANDA
-            </p>
+            <h2 className="text-2xl md:text-3xl font-bold text-[#111318] dark:text-white">Complete Your Payment</h2>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Order ID: <span className="font-mono font-medium text-primary">#882319922</span></p>
           </div>
-          
-          {/* Retro Timer */}
-          <div className="bg-[#FB7185] border-4 border-black p-2 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] rotate-1">
-            <div className="flex items-center gap-3 bg-black px-4 py-2">
-                <Clock size={24} className="text-[#FB7185] animate-pulse" />
-                <div className="text-right">
-                    <p className="text-[10px] text-[#FB7185] font-bold uppercase tracking-wider leading-none mb-1">Sisa Waktu</p>
-                    <p className="text-2xl font-mono font-bold text-white leading-none">{formatTime(timeLeft)}</p>
-                </div>
-            </div>
+          {/* Countdown Timer */}
+          <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-4 py-2 rounded-lg border border-red-100 dark:border-red-900/30">
+            <span className="material-symbols-outlined text-xl">timer</span>
+            <span className="font-bold font-mono">{formatTime(timeLeft)}</span>
+            <span className="text-sm font-medium">remaining</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* --- LEFT COLUMN --- */}
-          <div className="lg:col-span-8 space-y-8">
-            
-            {/* Trip Summary Card */}
-            <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-              <div className="bg-black text-white px-6 py-3 border-b-4 border-black flex justify-between items-center">
-                <h3 className="font-bold flex items-center gap-2 uppercase">
-                  <Bus size={20} className="text-[#A3E635]" /> 
-                  Rute Perjalanan
-                </h3>
-                {/* Fallback jika busName tidak ada di criteria/booking */}
-                <span className="text-xs font-mono font-bold px-2 py-1 bg-[#A3E635] text-black border border-white">
-                   EXECUTIVE CLASS
-                </span>
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Left Panel: Payment Methods */}
+          <div className="flex-1 space-y-6">
+            {/* Payment Selection Container */}
+            <div className="bg-white dark:bg-[#1a202c] rounded-xl shadow-sm border border-[#f0f2f4] dark:border-[#2d3748] overflow-hidden">
+              <div className="p-6 border-b border-[#f0f2f4] dark:border-[#2d3748]">
+                <h3 className="text-lg font-bold">Choose Payment Method</h3>
               </div>
-              
-              <div className="p-6 md:p-8">
-                <div className="flex flex-col md:flex-row justify-between gap-8 relative">
-                  {/* Dashed Line for Desktop */}
-                  <div className="hidden md:block absolute top-1/2 left-0 w-full border-t-4 border-dashed border-black/20 -z-10 transform -translate-y-1/2"></div>
+              <div className="p-6 space-y-6">
 
-                  <div className="flex-1 bg-white md:pr-4 relative z-10">
-                    <p className="text-xs font-bold bg-black text-white inline-block px-2 mb-2">BERANGKAT</p>
-                    {/* Menggunakan data dinamis dari Redux */}
-                    <p className="font-black text-2xl uppercase">{criteria.origin?.name}</p>
-                    <p className="font-mono font-bold text-gray-500">{criteria.date}</p>
-                  </div>
+                {/* Virtual Accounts */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Virtual Account</h4>
 
-                  <div className="flex flex-col items-center justify-center bg-white px-4 border-2 border-black h-min self-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rotate-[-2deg]">
-                    <p className="font-mono font-bold text-sm">DIRECT</p>
-                  </div>
-
-                  <div className="flex-1 bg-white md:pl-4 text-left md:text-right relative z-10">
-                    <p className="text-xs font-bold bg-[#FB7185] text-black inline-block px-2 mb-2 border border-black">TUJUAN</p>
-                    <p className="font-black text-2xl uppercase">{criteria.destination?.name}</p>
-                    <p className="font-mono font-bold text-gray-500">ESTIMASI</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Methods Selection */}
-            <div>
-              <h3 className="font-black text-2xl uppercase mb-4 flex items-center gap-2">
-                <span className="bg-black text-white w-8 h-8 flex items-center justify-center text-lg">2</span> 
-                Pilih Pembayaran
-              </h3>
-              
-              <div className="space-y-4">
-                {methods.map((method) => (
-                  <label
-                    key={method.id}
-                    className={`
-                      relative flex items-center p-4 md:p-6 border-4 cursor-pointer transition-all duration-200 group
-                      ${selectedPaymentMethodId === method.id 
-                        ? "bg-[#22D3EE] border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] translate-x-[-2px] translate-y-[-2px]" 
-                        : "bg-white border-black hover:bg-gray-50 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                      }
-                    `}
-                  >
+                  {/* BCA (ID: 1) */}
+                  <label className={`relative flex items-center p-4 border rounded-xl cursor-pointer transition-all ${selectedPaymentMethodId === 1 ? 'border-2 border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-[#1a202c]'}`}>
                     <input
                       type="radio"
                       name="payment_method"
-                      className="hidden"
-                      value={method.id}
-                      onChange={() => setSelectedPaymentMethodId(method.id)}
+                      className="sr-only"
+                      checked={selectedPaymentMethodId === 1}
+                      onChange={() => setSelectedPaymentMethodId(1)}
                     />
-                    
-                    {/* Icon Box */}
-                    <div className={`
-                      w-16 h-16 border-2 border-black flex items-center justify-center mr-6 shrink-0
-                      ${selectedPaymentMethodId === method.id ? "bg-white text-black" : "bg-[#F0F0F0] text-gray-400 group-hover:bg-white group-hover:text-black"}
-                    `}>
-                      {renderMethodIcon(method.id)}
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-black text-xl uppercase">{method.name}</span>
+                    <div className="flex items-center gap-4 w-full">
+                      <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center p-2 shadow-sm border border-slate-100">
+                        <div className="font-bold text-blue-800 italic">BCA</div>
                       </div>
-                      <p className="font-mono font-bold text-sm mt-1 opacity-70">{method.description}</p>
-                    </div>
-
-                    <div className="text-right pl-4">
-                      {method.fee === 0 ? (
-                        <span className="bg-[#A3E635] border-2 border-black px-2 py-1 text-xs font-bold uppercase">Gratis</span>
+                      <div className="flex-1">
+                        <div className="font-bold text-[#111318] dark:text-white">BCA Virtual Account</div>
+                        <div className="text-sm text-slate-500">Automatic verification</div>
+                      </div>
+                      {selectedPaymentMethodId === 1 ? (
+                        <div className="text-primary">
+                          <span className="material-symbols-outlined">check_circle</span>
+                        </div>
                       ) : (
-                        <span className="font-mono font-bold">+ {formatCurrency(method.fee)}</span>
+                        <div className="w-6 h-6 rounded-full border-2 border-slate-300 dark:border-slate-600"></div>
                       )}
                     </div>
-
-                    {/* Checkmark Indicator */}
-                    {selectedPaymentMethodId === method.id && (
-                      <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-black text-white border-2 border-white p-1 shadow-lg">
-                        <Check size={20} strokeWidth={4} />
-                      </div>
-                    )}
                   </label>
-                ))}
-              </div>
 
-              {/* Security Banner */}
-              <div className="mt-6 border-2 border-black bg-[#E0F2FE] p-4 flex items-center gap-4 border-dashed">
-                <Shield className="text-black shrink-0" size={24} strokeWidth={2.5} />
-                <p className="text-sm font-bold font-mono">
-                  ENKRIPSI SSL 256-BIT DIAKTIFKAN. DATA ANDA AMAN 100%.
-                </p>
+                  {/* Mandiri (ID: 2) */}
+                  <label className={`relative flex items-center p-4 border rounded-xl cursor-pointer transition-all ${selectedPaymentMethodId === 2 ? 'border-2 border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-[#1a202c]'}`}>
+                    <input
+                      type="radio"
+                      name="payment_method"
+                      className="sr-only"
+                      checked={selectedPaymentMethodId === 2}
+                      onChange={() => setSelectedPaymentMethodId(2)}
+                    />
+                    <div className="flex items-center gap-4 w-full">
+                      <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center p-2 shadow-sm border border-slate-100">
+                        <div className="font-bold text-yellow-600">Mandiri</div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-bold text-[#111318] dark:text-white">Mandiri Virtual Account</div>
+                        <div className="text-sm text-slate-500">Automatic verification</div>
+                      </div>
+                      {selectedPaymentMethodId === 2 ? (
+                        <div className="text-primary">
+                          <span className="material-symbols-outlined">check_circle</span>
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full border-2 border-slate-300 dark:border-slate-600"></div>
+                      )}
+                    </div>
+                  </label>
+                </div>
+
+                {/* E-Wallets */}
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">E-Wallet</h4>
+
+                  {/* GoPay (ID: 3) */}
+                  <label className={`relative flex items-center p-4 border rounded-xl cursor-pointer transition-all ${selectedPaymentMethodId === 3 ? 'border-2 border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-[#1a202c]'}`}>
+                    <input
+                      type="radio"
+                      name="payment_method"
+                      className="sr-only"
+                      checked={selectedPaymentMethodId === 3}
+                      onChange={() => setSelectedPaymentMethodId(3)}
+                    />
+                    <div className="flex items-center gap-4 w-full">
+                      <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center p-2 shadow-sm border border-slate-100">
+                        <span className="material-symbols-outlined text-blue-500">account_balance_wallet</span>
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-bold text-[#111318] dark:text-white">GoPay</div>
+                        <div className="text-sm text-slate-500">Connect your account</div>
+                      </div>
+                      {selectedPaymentMethodId === 3 ? (
+                        <div className="text-primary">
+                          <span className="material-symbols-outlined">check_circle</span>
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full border-2 border-slate-300 dark:border-slate-600"></div>
+                      )}
+                    </div>
+                  </label>
+
+                  {/* OVO (ID: 4) */}
+                  <label className={`relative flex items-center p-4 border rounded-xl cursor-pointer transition-all ${selectedPaymentMethodId === 4 ? 'border-2 border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-[#1a202c]'}`}>
+                    <input
+                      type="radio"
+                      name="payment_method"
+                      className="sr-only"
+                      checked={selectedPaymentMethodId === 4}
+                      onChange={() => setSelectedPaymentMethodId(4)}
+                    />
+                    <div className="flex items-center gap-4 w-full">
+                      <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center p-2 shadow-sm border border-slate-100">
+                        <span className="material-symbols-outlined text-purple-500">payments</span>
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-bold text-[#111318] dark:text-white">OVO</div>
+                        <div className="text-sm text-slate-500">Connect your account</div>
+                      </div>
+                      {selectedPaymentMethodId === 4 ? (
+                        <div className="text-primary">
+                          <span className="material-symbols-outlined">check_circle</span>
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full border-2 border-slate-300 dark:border-slate-600"></div>
+                      )}
+                    </div>
+                  </label>
+                </div>
+
+                {/* Credit Card */}
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Credit / Debit Card</h4>
+
+                  {/* Visa / Mastercard (ID: 5) */}
+                  <label className={`relative flex items-center p-4 border rounded-xl cursor-pointer transition-all ${selectedPaymentMethodId === 5 ? 'border-2 border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-white dark:bg-[#1a202c]'}`}>
+                    <input
+                      type="radio"
+                      name="payment_method"
+                      className="sr-only"
+                      checked={selectedPaymentMethodId === 5}
+                      onChange={() => setSelectedPaymentMethodId(5)}
+                    />
+                    <div className="flex items-center gap-4 w-full">
+                      <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center p-2 shadow-sm border border-slate-100">
+                        <span className="material-symbols-outlined text-slate-700">credit_card</span>
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-bold text-[#111318] dark:text-white">Visa / Mastercard</div>
+                        <div className="text-sm text-slate-500">Credit or debit card</div>
+                      </div>
+                      {selectedPaymentMethodId === 5 ? (
+                        <div className="text-primary">
+                          <span className="material-symbols-outlined">check_circle</span>
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full border-2 border-slate-300 dark:border-slate-600"></div>
+                      )}
+                    </div>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* --- RIGHT COLUMN (SUMMARY) --- */}
-          <div className="lg:col-span-4">
-            <div className="sticky top-24 space-y-6">
-              
-              {/* Summary Card "The Receipt" */}
-              <div className="bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] relative">
-                {/* Perforation effect top */}
-                <div className="absolute -top-2 left-0 w-full h-4 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDIwIDIwIiBmaWxsPSIjRjBGMEYwIj48Y2lyY2xlIGN4PSIxMCIgY3k9IjEwIiByPSI4IiAvPjwvc3ZnPg==')] bg-repeat-x"></div>
-
-                <div className="bg-black p-4 mt-2 mx-2 text-center">
-                  <h3 className="text-white font-black text-xl uppercase tracking-widest flex justify-center items-center gap-2">
-                    <Ticket size={24} className="text-[#FEF08A]" />
-                    TOTAL BIAYA
-                  </h3>
+          {/* Right Panel: Booking Summary */}
+          <div className="lg:w-[400px] flex-shrink-0 space-y-6">
+            <div className="bg-white dark:bg-[#1a202c] rounded-xl shadow-sm border border-[#f0f2f4] dark:border-[#2d3748] sticky top-8">
+              <div className="p-6 border-b border-[#f0f2f4] dark:border-[#2d3748]">
+                <h3 className="text-lg font-bold">Booking Details</h3>
+              </div>
+              <div className="p-6 space-y-6">
+                {/* Route Visualizer */}
+                <div className="relative pl-4 border-l-2 border-dashed border-slate-200 dark:border-slate-700 space-y-8">
+                  {/* Origin */}
+                  <div className="relative">
+                    <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 border-primary bg-white"></div>
+                    <div className="space-y-1">
+                      <span className="text-xs font-semibold text-slate-500 uppercase">Origin</span>
+                      <h4 className="font-bold text-lg leading-tight">{criteria.origin?.name}</h4>
+                      <p className="text-sm text-slate-500">{criteria.origin?.address || "Main Terminal"}</p>
+                      <p className="text-xs font-medium text-slate-400">{criteria.date} • {currentBooking.schedule?.departureTime}</p>
+                    </div>
+                  </div>
+                  {/* Destination */}
+                  <div className="relative">
+                    <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-primary"></div>
+                    <div className="space-y-1">
+                      <span className="text-xs font-semibold text-slate-500 uppercase">Destination</span>
+                      <h4 className="font-bold text-lg leading-tight">{criteria.destination?.name}</h4>
+                      <p className="text-sm text-slate-500">{criteria.destination?.address || "Main Terminal"}</p>
+                      <p className="text-xs font-medium text-slate-400">{criteria.date} • {currentBooking.schedule?.arrivalTime}</p>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="p-6 font-mono">
-                  {/* Passenger List */}
-                  <div className="mb-6 space-y-3">
-                    <p className="font-bold border-b-2 border-black pb-1 mb-2">ITEM PEMBELIAN</p>
-                    {passengerData.map((p, i) => (
-                      <div key={i} className="flex justify-between items-start text-sm font-bold">
-                        <div>
-                          <p>{p.name.toUpperCase()}</p>
-                          <p className="text-xs text-gray-500">KURSI {p.seatNumber}</p>
-                        </div>
-                        <p>{formatCurrency(pricePerSeat)}</p>
-                      </div>
+                {/* Bus Info Card */}
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg flex gap-3 items-start">
+                  <div className="h-10 w-10 bg-white dark:bg-slate-700 rounded-full flex items-center justify-center shadow-sm text-primary">
+                    <span className="material-symbols-outlined">directions_bus</span>
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-sm">{currentBooking.schedule?.bus?.busNumber || "Bus"}</h5>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{currentBooking.schedule?.bus?.busType || "Standard"} Class • {currentBooking.schedule?.bus?.busNumber || ""}</p>
+                    <div className="flex gap-2 mt-2">
+                      <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/30 dark:text-blue-400">AC</span>
+                      <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/30 dark:text-blue-400">Wifi</span>
+                      <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/30 dark:text-blue-400">Toilet</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Seats */}
+                <div className="flex justify-between items-center border-t border-[#f0f2f4] dark:border-[#2d3748] pt-4">
+                  <span className="text-sm font-medium text-slate-500">Selected Seats</span>
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    {passengerData.map((p, idx) => (
+                      <span key={idx} className="px-3 py-1 bg-primary text-white text-sm font-bold rounded-lg shadow-sm">
+                        {p.seatNumber}
+                      </span>
                     ))}
                   </div>
+                </div>
 
-                  {/* Calculations */}
-                  <div className="space-y-2 text-sm border-t-2 border-dashed border-black pt-4">
-                    <div className="flex justify-between font-bold text-gray-600">
-                      <span>SUBTOTAL</span>
-                      <span>{formatCurrency(subtotal)}</span>
-                    </div>
-                    
-                    {selectedMethod && (
-                      <div className="flex justify-between font-bold text-black animate-in fade-in slide-in-from-top-1">
-                        <span>BIAYA ADM</span>
-                        <span>
-                          {selectedMethod.fee === 0 ? "RP 0" : formatCurrency(selectedMethod.fee)}
-                        </span>
-                      </div>
-                    )}
+                {/* Price Breakdown */}
+                <div className="space-y-3 pt-4 border-t border-[#f0f2f4] dark:border-[#2d3748]">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Ticket Price (x{passengerData.length})</span>
+                    <span className="font-medium">{formatCurrency(subtotal)}</span>
                   </div>
-
-                  <div className="border-t-4 border-black mt-4 pt-4">
-                    <div className="flex justify-between items-center">
-                      <span className="font-black text-xl uppercase">TOTAL</span>
-                      <span className="text-2xl font-black text-black bg-[#A3E635] px-2">
-                        {formatCurrency(finalAmount)}
-                      </span>
-                    </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Service Fee</span>
+                    <span className="font-medium">{formatCurrency(serviceFee)}</span>
                   </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Tax</span>
+                    <span className="font-medium">{formatCurrency(tax)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span className="font-medium">Discount</span>
+                    <span className="font-medium">- {formatCurrency(discount)}</span>
+                  </div>
+                </div>
 
-                  {/* Pay Button */}
+                {/* Total */}
+                <div className="bg-primary/5 -mx-6 -mb-6 p-6 mt-4 border-t border-primary/10">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Total Amount</span>
+                    <span className="text-2xl font-bold text-primary">{formatCurrency(totalAmount)}</span>
+                  </div>
                   <button
                     onClick={handlePayment}
-                    disabled={!selectedPaymentMethodId || isProcessing}
-                    className={`
-                      w-full mt-6 py-4 font-black text-xl uppercase border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all relative overflow-hidden
-                      flex items-center justify-center gap-2 group
-                      ${!selectedPaymentMethodId || isProcessing
-                        ? "bg-gray-300 text-gray-500 cursor-not-allowed shadow-none border-gray-400"
-                        : "bg-[#FEF08A] hover:bg-[#A3E635] text-black hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:shadow-none"
-                      }
-                    `}
+                    disabled={isProcessing}
+                    className="w-full bg-primary hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
                     {isProcessing ? (
-                       <>
-                        <Loader2 className="animate-spin" size={24} strokeWidth={3} />
-                        MEMPROSES...
-                       </>
+                      <>
+                        <span className="material-symbols-outlined animate-spin">refresh</span>
+                        Processing...
+                      </>
                     ) : (
                       <>
-                        BAYAR SEKARANG
-                        <ChevronRight size={24} strokeWidth={4} className="group-hover:translate-x-1 transition-transform" />
+                        <span className="material-symbols-outlined text-[20px]">lock</span>
+                        Pay Securely
                       </>
                     )}
                   </button>
-                  
-                  <p className="text-center text-[10px] font-bold mt-4 uppercase text-gray-500">
-                    *Syarat & Ketentuan berlaku
-                  </p>
+                  <div className="flex items-center justify-center gap-2 mt-3 text-xs text-slate-400">
+                    <span className="material-symbols-outlined text-[16px]">verified_user</span>
+                    <span>Guaranteed Secure Payment with SSL</span>
+                  </div>
                 </div>
               </div>
-
-              {/* Promo Code Boxy */}
-              <div className="bg-black p-1 shadow-[8px_8px_0px_0px_rgba(163,230,53,1)]">
-                <div className="bg-white border-2 border-black p-2 flex gap-2">
-                   <input 
-                      type="text" 
-                      placeholder="KODE PROMO" 
-                      className="flex-1 bg-[#F0F0F0] border-2 border-black px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:bg-[#FEF08A] transition-colors placeholder:text-gray-400"
-                   />
-                   <button className="bg-black text-white font-bold text-sm px-4 border-2 border-black hover:bg-white hover:text-black transition-colors uppercase">
-                      CEK
-                   </button>
-                </div>
-              </div>
-
             </div>
           </div>
         </div>
-      </div>
-
-      {/* --- FULL SCREEN LOADING OVERLAY (Retro) --- */}
-      {isProcessing && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-[#FEF08A] border-4 border-black p-8 shadow-[16px_16px_0px_0px_#A3E635] max-w-sm w-full mx-4 text-center animate-in zoom-in-95 duration-200">
-             <div className="flex justify-center mb-6">
-                <div className="w-16 h-16 bg-white border-4 border-black grid grid-cols-2 grid-rows-2 animate-spin">
-                    <div className="bg-black"></div>
-                    <div></div>
-                    <div></div>
-                    <div className="bg-black"></div>
-                </div>
-             </div>
-            <h3 className="text-2xl font-black uppercase text-black mb-2 glitch-effect">JANGAN KELUAR!</h3>
-            <p className="font-mono font-bold text-sm bg-white border-2 border-black p-2 inline-block">
-              MENGHUBUNGKAN GATEWAY...
-            </p>
-          </div>
-        </div>
-      )}
-
+      </main>
     </div>
   );
 };

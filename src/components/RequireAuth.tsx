@@ -1,15 +1,12 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { useLocation, Navigate, Outlet } from "react-router-dom";
-// import { selectCurrentUser } from "../features/user/AuthSlice";
-// import { useSelector } from "react-redux";
+import { useSelector } from "react-redux";
+import type { RootState } from "../features/store";
+
 const RequireAuth: React.FC = () => {
-  const token = 123;
+  const token = useSelector((state: RootState) => state.auth.token);
   const location = useLocation();
 
-  useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    token;
-  }, []);
   return token ? (
     <Outlet />
   ) : (

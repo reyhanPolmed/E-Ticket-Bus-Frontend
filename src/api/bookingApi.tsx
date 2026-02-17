@@ -1,40 +1,34 @@
-export const createBooking = async (token : string, scheduleId : string, passengers: string, contactEmail: string, contactPhone: string, specialRequests: string) => {
-  return await fetch(`${import.meta.env.VITE_API_PATH}/bookings`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      'Accept': "application/json",
-      'Authorization': token
-    },
-    body: JSON.stringify({
-        scheduleId,
-        passengers,
-        contactEmail,
-        contactPhone,
-        specialRequests
-    }),
+import apiClient from "./apiClient";
+
+export interface CreateBookingPayload {
+  scheduleId: string;
+  contactEmail: string;
+  contactPhone: string;
+  specialRequests?: string;
+  passengers: {
+    firstName: string;
+    lastName: string;
+    identityNumber: string;
+    identityType: string;
+    age: number;
+    phone: string;
+    email?: string;
+    seatNumber: string;
+    gender: string;
+    nationality: string;
+  }[];
+}
+
+export const createBooking = async (payload: CreateBookingPayload) => {
+  return apiClient.post("/bookings", payload);
+};
+
+export const getMyBookings = async (status?: string) => {
+  return apiClient.get("/bookings", {
+    params: status ? { status } : {},
   });
 };
 
-export const getBookingById = async (token : string) => {
-  return await fetch(`${import.meta.env.VITE_API_PATH}/bookings`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: token,
-    },
-  });
-};
-
-export const updateBookingStatus = async (id: string, status: string) => {
-  return await fetch(`${import.meta.env.VITE_API_PATH}/bookings/${id}/status`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-        status
-    }),
-  });
+export const getBookingDetails = async (id: string) => {
+  return apiClient.get(`/bookings/${id}`);
 };

@@ -1,9 +1,19 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
-// Define the types for your state
+// User interface matching the API response
 interface User {
-    id: string; 
-    username: string;
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    role?: string;
+    status?: string;
+    emailVerified?: boolean;
+    lastLogin?: string;
+    profileImage?: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 interface AuthState {
@@ -11,7 +21,7 @@ interface AuthState {
     token: string | null;
 }
 
-// Define the type for the payload of the setCredential action
+// The API login response returns { data: { token, user } }
 interface SetCredentialPayload {
     data: {
         token: string;
@@ -19,7 +29,6 @@ interface SetCredentialPayload {
     };
 }
 
-// Set the initial state with the defined type
 const initialState: AuthState = {
     user: null,
     token: null
@@ -27,7 +36,7 @@ const initialState: AuthState = {
 
 const authSlice = createSlice({
     name: 'auth',
-    initialState, // The type is inferred from here
+    initialState,
     reducers: {
         setCredential: (state, action: PayloadAction<SetCredentialPayload>) => {
             const { data } = action.payload;
@@ -41,11 +50,8 @@ const authSlice = createSlice({
     }
 });
 
-// The selector needs to know the type of the entire state
-// We'll create a RootState type in the next step
 export const { setCredential, logOut } = authSlice.actions;
 
-// Selector function with proper typing
 export const selectCurrentUser = (state: { auth: AuthState }) => state.auth.token;
 
 export default authSlice.reducer;

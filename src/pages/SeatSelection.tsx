@@ -1,267 +1,484 @@
-import React from "react";
-import { X, Disc, ArrowRight } from "lucide-react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
 import { useAppDispatch, useAppSelector } from "../features/hooks";
 import {
-  setSelectedSeats,
-  setBookingStep,
+    setSelectedSeats,
+    setBookingStep,
 } from "../features/booking/bookingSlice";
+import { getBusSeats } from "../api/seatApi";
 
 const SeatSelection: React.FC = () => {
-  const dispatch = useAppDispatch();
-  const navigate = useNavigate();
+    const dispatch = useAppDispatch();
+    const navigate = useNavigate();
 
-  // --- REDUX STATE ---
-  const { currentBooking, selectedSeats } = useAppSelector(
-    (state) => state.booking
-  );
+    // --- LOCAL STATE ---
+    const [currentDeck, setCurrentDeck] = useState<'lower' | 'upper'>('lower');
+    // Store full seat details to pass to Redux
+    const [allSeats, setAllSeats] = useState<{
+        id: string;
+        status: string;
+        price: number;
+        row: number;
+        position: number;
+        seatType: string;
+    }[]>([]);
+    const [_loadingSeats, setLoadingSeats] = useState(true);
 
-  // --- STATIC SEAT LAYOUT (Simulated Data) ---
-  // In a real app, this might come from currentBooking.seats or API
-  const allSeats = [
-    { id: '1A', status: 'available' }, { id: '1B', status: 'available' },
-    { id: '1C', status: 'occupied' },  { id: '1D', status: 'occupied' },
-    { id: '2A', status: 'available' }, { id: '2B', status: 'available' },
-    { id: '2C', status: 'available' }, { id: '2D', status: 'available' },
-    { id: '3A', status: 'occupied' },  { id: '3B', status: 'available' },
-    { id: '3C', status: 'available' }, { id: '3D', status: 'available' },
-    { id: '4A', status: 'available' }, { id: '4B', status: 'available' },
-    { id: '4C', status: 'available' }, { id: '4D', status: 'available' },
-    { id: '5A', status: 'available' }, { id: '5B', status: 'available' },
-    { id: '5C', status: 'occupied' },  { id: '5D', status: 'occupied' },
-    { id: '6A', status: 'available' }, { id: '6B', status: 'available' },
-    { id: '6C', status: 'available' }, { id: '6D', status: 'available' },
-  ];
-
-  // --- GUARD ---
-  if (!currentBooking) {
-    return (
-      <div className="min-h-screen bg-[#E0F2FE] flex items-center justify-center p-10 font-sans">
-        <div className="bg-white border-4 border-black p-8 text-center shadow-[8px_8px_0_0_#000]">
-           <p className="font-black uppercase text-xl">Tidak ada booking aktif</p>
-           <button 
-             onClick={() => navigate('/')}
-             className="mt-4 bg-black text-white px-4 py-2 font-bold uppercase"
-           >
-             Kembali
-           </button>
-        </div>
-      </div>
+    // --- REDUX STATE ---
+    const { currentBooking, selectedSeats } = useAppSelector(
+        (state) => state.booking
     );
-  }
 
-  // --- HANDLERS ---
-  const handleSeatClick = (seatId: string) => {
-    const isSelected = selectedSeats.find((s) => s.seatNumber === seatId);
-    let updatedSeats;
+    // --- FETCH SEATS FROM API ---
+    useEffect(() => {
+        const fetchSeats = async () => {
+            if (!currentBooking?.scheduleId) return;
+            setLoadingSeats(true);
+            try {
+                // Typed response automatically handled by axios generic
+                const response = await getBusSeats(currentBooking.scheduleId);
 
-    if (isSelected) {
-      updatedSeats = selectedSeats.filter((s) => s.seatNumber !== seatId);
-    } else {
-      updatedSeats = [...selectedSeats, { seatNumber: seatId, isAvailable: true }];
+                // Access data.data.seats based on new structure
+                const seatData = response.data.data.seats;
+
+                const mapped = seatData.map((s) => ({
+                    id: s.seatNumber,
+                    status: s.isAvailable ? 'available' : 'occupied',
+                    price: parseFloat(s.price),
+                    row: s.row,
+                    position: s.position,
+                    seatType: s.seatType
+                }));
+                setAllSeats(mapped);
+            } catch (error) {
+                console.error("Failed to fetch seats:", error);
+                setAllSeats([]);
+            } finally {
+                setLoadingSeats(false);
+            }
+        };
+        fetchSeats();
+    }, [currentBooking?.scheduleId]);
+
+    // Split seats into decks (first half lower, second half upper)
+    const midpoint = Math.ceil(allSeats.length / 2);
+    const lowerDeckSeats = allSeats.slice(0, midpoint);
+    const upperDeckSeats = allSeats.slice(midpoint);
+    const displayedSeats = currentDeck === 'lower' ? lowerDeckSeats : upperDeckSeats;
+
+    // --- HELPERS ---
+    const getSeatStatus = (seat: { id: string, status: string }) => {
+        // 1. Check if occupied (static/API)
+        if (seat.status === 'occupied') return 'occupied';
+
+        // 2. Check if selected (Redux)
+        if (selectedSeats.some(s => s.seatNumber === seat.id)) return 'selected';
+
+        // 3. Default available
+        return 'available';
+    };
+
+    const handleSeatClick = (seatId: string) => {
+        const isSelected = selectedSeats.find((s) => s.seatNumber === seatId);
+        let updatedSeats;
+
+        if (isSelected) {
+            updatedSeats = selectedSeats.filter((s) => s.seatNumber !== seatId);
+        } else {
+            const seatInfo = allSeats.find(s => s.id === seatId);
+            if (!seatInfo) return;
+
+            const newSeat = {
+                seatNumber: seatId,
+                isAvailable: true,
+                price: seatInfo.price.toString(),
+                seatType: seatInfo.seatType,
+                row: seatInfo.row,
+                position: seatInfo.position
+            };
+            updatedSeats = [...selectedSeats, newSeat];
+        }
+
+        dispatch(setSelectedSeats(updatedSeats));
+    };
+
+    const handleConfirmSeats = () => {
+        if (selectedSeats.length === 0) {
+            alert("Please select at least one seat.");
+            return;
+        }
+        dispatch(setBookingStep("passengers"));
+        navigate("/passenger-data");
+    };
+
+    const calculateTotal = () => {
+        const tax = 12.50; // Flat tax for demo
+        const discount = 5.00; // Flat discount for demo
+
+        const subtotal = selectedSeats.reduce((acc, seat) => {
+            return acc + parseFloat(seat.price || "0");
+        }, 0);
+
+        return Math.max(0, subtotal + tax - discount);
+    };
+
+    // Organize seats into rows for rendering
+    const rows = [];
+    const seatsPerRow = 4;
+    for (let i = 0; i < displayedSeats.length; i += seatsPerRow) {
+        rows.push(displayedSeats.slice(i, i + seatsPerRow));
     }
 
-    dispatch(setSelectedSeats(updatedSeats));
-  };
-
-  const handleConfirmSeats = () => {
-    if (selectedSeats.length === 0) {
-        alert("Pilih setidaknya satu kursi!");
-        return;
+    // --- GUARD ---
+    if (!currentBooking) {
+        // Redirect or show empty state if accessed directly without booking
+        // For dev ease, we might render anyway, but let's keep it safe
+        return (
+            <div className="min-h-screen bg-background-light flex items-center justify-center p-10 font-display">
+                <div className="bg-white rounded-xl p-8 text-center shadow-lg border border-slate-200">
+                    <p className="font-bold text-slate-800 text-xl mb-4">No active booking session found.</p>
+                    <button
+                        onClick={() => navigate('/')}
+                        className="bg-primary hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold transition-colors"
+                    >
+                        Go Home
+                    </button>
+                </div>
+            </div>
+        );
     }
-    dispatch(setBookingStep("passengers"));
-    navigate("/passenger-data");
-  };
 
-  // --- HELPERS ---
-  const getSeatStatus = (seat: { id: string, status: string }) => {
-      // Prioritas 1: Jika occupied dari data statis/API, maka occupied
-      if (seat.status === 'occupied') return 'occupied';
-      // Prioritas 2: Jika ada di Redux state selectedSeats, maka selected
-      if (selectedSeats.some(s => s.seatNumber === seat.id)) return 'selected';
-      // Default: available
-      return 'available';
-  };
-
-  const getSeatStyle = (status: string) => {
-    const base = "relative w-14 h-14 md:w-16 md:h-16 flex items-center justify-center font-mono font-bold text-lg border-4 border-black transition-all duration-150 rounded-md";
-    
-    switch (status) {
-      case 'available':
-        return `${base} bg-white text-black shadow-[4px_4px_0_0_#000] hover:-translate-y-1 hover:shadow-[6px_6px_0_0_#000] cursor-pointer`;
-      case 'selected':
-        return `${base} bg-[#FB7185] text-black shadow-none translate-x-[4px] translate-y-[4px] cursor-pointer`;
-      case 'occupied':
-        return `${base} bg-gray-300 text-gray-500 cursor-not-allowed opacity-60 border-gray-500`;
-      default:
-        return base;
-    }
-  };
-
-  // Layout Logic
-  const leftSeats = allSeats.filter(s => s.id.includes('A') || s.id.includes('B'));
-  const rightSeats = allSeats.filter(s => s.id.includes('C') || s.id.includes('D'));
-
-  // --- RENDER ---
-  return (
-    <div className="min-h-screen bg-[#E0F2FE] p-8 font-sans selection:bg-black selection:text-white relative overflow-hidden flex flex-col items-center">
-      
-      {/* Background Pattern */}
-      <div className="absolute inset-0 z-0 opacity-20 pointer-events-none" 
-           style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
-      </div>
-
-      <div className="relative z-10 w-full max-w-4xl">
-        
-        {/* Header */}
-        <div className="text-center mb-10">
-            <h1 className="text-5xl font-black uppercase text-black mb-2 drop-shadow-sm">
-                Pilih Kursi
-            </h1>
-            <p className="font-mono font-bold bg-[#FEF08A] inline-block px-2 py-1 border-2 border-black shadow-[4px_4px_0_0_#000]">
-                {/* Fallback to dummy route name if booking data doesn't provide it */}
-                BUS EXECUTIVE • JKT - YGY 
-            </p>
-        </div>
-
-        <div className="flex flex-col lg:flex-row gap-8 items-start justify-center">
-            
-            {/* --- LEGEND & INFO --- */}
-            <div className="w-full lg:w-1/3 space-y-6">
-                
-                {/* Legend Box */}
-                <div className="bg-white border-4 border-black p-6 shadow-[8px_8px_0_0_#000]">
-                    <h3 className="font-black uppercase text-xl mb-4 border-b-4 border-black pb-2">Keterangan</h3>
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-white border-4 border-black shadow-[2px_2px_0_0_#000]"></div>
-                            <span className="font-mono font-bold">TERSEDIA</span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-[#FB7185] border-4 border-black"></div>
-                            <span className="font-mono font-bold">DIPILIH</span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-gray-300 border-4 border-gray-500 flex items-center justify-center text-gray-500">
-                                <X size={24} strokeWidth={3}/>
+    return (
+        <div className="min-h-screen bg-background-light dark:bg-background-dark font-display flex flex-col">
+            {/* Top Navigation */}
+            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <header className="flex items-center justify-between h-16">
+                        <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate('/')}>
+                            <div className="text-primary">
+                                <span className="material-symbols-outlined text-3xl">directions_bus</span>
                             </div>
-                            <span className="font-mono font-bold text-gray-500">TERISI</span>
+                            <h2 className="text-slate-900 dark:text-white text-xl font-bold tracking-tight">BusConnect</h2>
                         </div>
-                    </div>
+                        <div className="hidden md:flex items-center gap-8">
+                            <nav className="flex gap-6">
+                                <a href="#" className="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary font-medium transition-colors">Home</a>
+                                <a href="#" className="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary font-medium transition-colors">My Bookings</a>
+                                <a href="#" className="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary font-medium transition-colors">Help</a>
+                            </nav>
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                                JD
+                            </div>
+                        </div>
+                    </header>
                 </div>
-
-                {/* Selected Summary */}
-                <div className="bg-[#A3E635] border-4 border-black p-6 shadow-[8px_8px_0_0_#000]">
-                    <h3 className="font-black uppercase text-xl mb-2">Kursi Anda</h3>
-                    {selectedSeats.length > 0 ? (
-                        <div className="flex flex-wrap gap-2 mt-3">
-                            {selectedSeats.map(seat => (
-                                <span key={seat.seatNumber} className="bg-black text-white px-3 py-1 font-mono font-bold text-lg">
-                                    {seat.seatNumber}
-                                </span>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="font-mono text-sm italic opacity-70 mt-2">Belum ada kursi dipilih.</p>
-                    )}
-                    <div className="mt-4 pt-4 border-t-4 border-black">
-                        <div className="flex justify-between font-mono font-bold text-lg">
-                            <span>TOTAL</span>
-                            <span>{selectedSeats.length} x</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Confirm Button (Desktop layout) */}
-                <button
-                    onClick={handleConfirmSeats}
-                    disabled={selectedSeats.length === 0}
-                    className="hidden lg:flex w-full bg-black text-white border-4 border-transparent hover:bg-white hover:text-black hover:border-black font-black text-xl uppercase py-4 shadow-[8px_8px_0_0_#A3E635] hover:shadow-[4px_4px_0_0_#000] hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed items-center justify-center gap-2"
-                >
-                    Konfirmasi <ArrowRight strokeWidth={4} />
-                </button>
             </div>
 
-            {/* --- BUS LAYOUT --- */}
-            <div className="w-full lg:w-2/3">
-                {/* Bus Chassis Container */}
-                <div className="bg-white border-4 border-black p-4 md:p-8 shadow-[12px_12px_0_0_#000] relative rounded-t-[3rem] rounded-b-lg">
-                    
-                    {/* Driver Area */}
-                    <div className="flex justify-end mb-8 border-b-4 border-dashed border-black/20 pb-4">
-                        <div className="flex flex-col items-center">
-                            <div className="w-16 h-16 bg-gray-200 border-4 border-black rounded-full flex items-center justify-center mb-1">
-                                <Disc size={40} strokeWidth={3} className="animate-spin-slow text-black" />
-                            </div>
-                            <span className="font-mono font-bold text-xs bg-black text-white px-1">SUPIR</span>
-                        </div>
+            {/* Main Content */}
+            <main className="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Breadcrumb & Header */}
+                <div className="mb-8">
+                    <div className="flex items-center text-sm text-slate-500 mb-4">
+                        <a href="#" onClick={() => navigate('/')} className="hover:text-primary">Home</a>
+                        <span className="mx-2">/</span>
+                        <a href="#" className="hover:text-primary">Search Results</a>
+                        <span className="mx-2">/</span>
+                        <span className="text-slate-900 dark:text-white font-medium">Seat Selection</span>
                     </div>
-
-                    <div className="flex justify-between gap-4 md:gap-8">
-                        {/* Left Column (AB) */}
-                        <div className="grid grid-cols-2 gap-3 md:gap-4">
-                            {leftSeats.map((seat) => {
-                                const status = getSeatStatus(seat);
-                                return (
-                                    <div
-                                        key={seat.id}
-                                        className={getSeatStyle(status)}
-                                        onClick={() => status !== 'occupied' && handleSeatClick(seat.id)}
-                                    >
-                                        {status === 'occupied' ? <X size={28} strokeWidth={4} /> : seat.id}
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Aisle / Lorong */}
-                        <div className="flex-1 flex items-center justify-center">
-                            <div className="h-full w-full flex flex-col items-center justify-center gap-8 opacity-20">
-                                <span className="font-black text-4xl md:text-6xl tracking-[1em] [writing-mode:vertical-rl] text-center">
-                                    LORONG
-                                </span>
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div>
+                            <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Select Your Seats</h1>
+                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                                <span className="material-symbols-outlined text-lg">calendar_today</span>
+                                <span>Mon, 12 Oct • 09:00 AM</span>
+                                <span className="mx-2">•</span>
+                                <span className="material-symbols-outlined text-lg">route</span>
+                                <span>New York to Washington DC</span>
                             </div>
                         </div>
-
-                        {/* Right Column (CD) */}
-                        <div className="grid grid-cols-2 gap-3 md:gap-4">
-                            {rightSeats.map((seat) => {
-                                const status = getSeatStatus(seat);
-                                return (
-                                    <div
-                                        key={seat.id}
-                                        className={getSeatStyle(status)}
-                                        onClick={() => status !== 'occupied' && handleSeatClick(seat.id)}
-                                    >
-                                        {status === 'occupied' ? <X size={28} strokeWidth={4} /> : seat.id}
-                                    </div>
-                                );
-                            })}
+                        <div className="hidden md:block">
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
+                                <span className="material-symbols-outlined text-sm">directions_bus</span>
+                                Express Voyager (AC Seater)
+                            </div>
                         </div>
                     </div>
-
-                    {/* Back of Bus */}
-                    <div className="mt-8 pt-4 border-t-4 border-dashed border-black/20 text-center">
-                        <span className="font-black text-gray-300 text-4xl uppercase">Belakang</span>
-                    </div>
-
                 </div>
 
-                {/* Confirm Button (Mobile layout) */}
-                <button
-                    onClick={handleConfirmSeats}
-                    disabled={selectedSeats.length === 0}
-                    className="lg:hidden w-full mt-8 bg-black text-white border-4 border-transparent hover:bg-white hover:text-black hover:border-black font-black text-xl uppercase py-4 shadow-[8px_8px_0_0_#A3E635] hover:shadow-[4px_4px_0_0_#000] hover:-translate-y-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                    Konfirmasi <ArrowRight strokeWidth={4} />
-                </button>
+                <div className="flex flex-col lg:flex-row gap-8 items-start">
 
-            </div>
+                    {/* Left Column: Seat Map */}
+                    <div className="flex-1 w-full lg:w-2/3">
+
+                        {/* Legend */}
+                        <div className="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 mb-6">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Seat Legend</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded border-2 border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400">
+                                        <span className="material-symbols-outlined text-xl">chair</span>
+                                    </div>
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Available</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded bg-primary text-white flex items-center justify-center shadow-md shadow-primary/30">
+                                        <span className="material-symbols-outlined text-xl">check</span>
+                                    </div>
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Selected</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 flex items-center justify-center cursor-not-allowed">
+                                        <span className="material-symbols-outlined text-xl">block</span>
+                                    </div>
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Occupied</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded border-2 border-pink-400 flex items-center justify-center text-pink-400">
+                                        <span className="material-symbols-outlined text-xl">person</span>
+                                    </div>
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Ladies</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Bus Layout Container */}
+                        <div className="bg-white dark:bg-slate-900 rounded-xl p-6 md:p-10 shadow-sm border border-slate-200 dark:border-slate-800 relative overflow-hidden transition-all duration-300">
+
+                            {/* Deck Switcher & Driver Info */}
+                            <div className="flex justify-between items-center mb-8 border-b border-slate-100 dark:border-slate-800 pb-4">
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setCurrentDeck('lower')}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${currentDeck === 'lower'
+                                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
+                                            : 'bg-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                    >
+                                        Lower Deck
+                                    </button>
+                                    <button
+                                        onClick={() => setCurrentDeck('upper')}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${currentDeck === 'upper'
+                                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
+                                            : 'bg-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                    >
+                                        Upper Deck
+                                    </button>
+                                </div>
+                                <div className="text-slate-400 flex items-center gap-1 text-sm">
+                                    <span className="material-symbols-outlined text-lg">steering_wheel_heat</span>
+                                    Driver
+                                </div>
+                            </div>
+
+                            {/* Bus Structure */}
+                            <div className="mx-auto max-w-[420px] bg-slate-50 dark:bg-slate-800/50 rounded-3xl border-2 border-slate-200 dark:border-slate-700 p-8 relative min-h-[500px]">
+
+                                {/* Driver Seat Indicator */}
+                                <div className="absolute right-8 top-8 opacity-50">
+                                    <span className="material-symbols-outlined text-3xl text-slate-400">airline_seat_recline_extra</span>
+                                </div>
+
+                                {/* Seat Grid */}
+                                <div className="mt-12 flex flex-col gap-4">
+                                    {rows.map((rowSeats, rowIndex) => (
+                                        <div key={rowIndex} className="flex justify-between items-center">
+                                            {/* Left Side (First 2 seats) */}
+                                            <div className="flex gap-3">
+                                                {rowSeats.slice(0, 2).map((seat) => {
+                                                    const status = getSeatStatus(seat);
+                                                    return (
+                                                        <label key={seat.id} className="cursor-pointer group relative">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="sr-only"
+                                                                checked={status === 'selected'}
+                                                                disabled={status === 'occupied'}
+                                                                onChange={() => handleSeatClick(seat.id)}
+                                                            />
+                                                            <div
+                                                                className={`w-10 h-10 md:w-12 md:h-12 rounded-lg flex items-center justify-center transition-all duration-200
+                                                                ${status === 'available' ? 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-primary' : ''}
+                                                                ${status === 'selected' ? 'bg-primary border-primary text-white shadow-md shadow-primary/30' : ''}
+                                                                ${status === 'occupied' ? 'bg-slate-200 dark:bg-slate-700 cursor-not-allowed' : ''}
+                                                            `}
+                                                            >
+                                                                <span className={`material-symbols-outlined text-2xl ${status === 'available' ? 'text-slate-400' :
+                                                                    status === 'selected' ? 'text-white' :
+                                                                        'text-slate-400'
+                                                                    } ${status === 'occupied' ? 'rotate-0' : ''}`}>
+                                                                    {status === 'selected' ? 'check' : status === 'occupied' ? 'block' : 'chair'}
+                                                                </span>
+                                                            </div>
+                                                            <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                                                {seat.id}
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Aisle */}
+                                            <div className="w-8 md:w-12"></div>
+
+                                            {/* Right Side (Last 2 seats) */}
+                                            <div className="flex gap-3">
+                                                {rowSeats.slice(2, 4).map((seat) => {
+                                                    const status = getSeatStatus(seat);
+                                                    return (
+                                                        <label key={seat.id} className="cursor-pointer group relative">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="sr-only"
+                                                                checked={status === 'selected'}
+                                                                disabled={status === 'occupied'}
+                                                                onChange={() => handleSeatClick(seat.id)}
+                                                            />
+                                                            <div
+                                                                className={`w-10 h-10 md:w-12 md:h-12 rounded-lg flex items-center justify-center transition-all duration-200
+                                                                ${status === 'available' ? 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-primary' : ''}
+                                                                ${status === 'selected' ? 'bg-primary border-primary text-white shadow-md shadow-primary/30' : ''}
+                                                                ${status === 'occupied' ? 'bg-slate-200 dark:bg-slate-700 cursor-not-allowed' : ''}
+                                                            `}
+                                                            >
+                                                                <span className={`material-symbols-outlined text-2xl ${status === 'available' ? 'text-slate-400' :
+                                                                    status === 'selected' ? 'text-white' :
+                                                                        'text-slate-400'
+                                                                    } ${status === 'occupied' ? 'rotate-0' : ''}`}>
+                                                                    {status === 'selected' ? 'check' : status === 'occupied' ? 'block' : 'chair'}
+                                                                </span>
+                                                            </div>
+                                                            <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                                                {seat.id}
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Column: Booking Summary */}
+                    <div className="w-full lg:w-1/3 sticky top-6">
+                        <div className="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-xl border border-slate-200 dark:border-slate-800 flex flex-col h-full">
+                            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Booking Summary</h2>
+
+                            {/* Header Image */}
+                            <div className="relative w-full h-32 rounded-lg overflow-hidden mb-6 group">
+                                <img
+                                    alt="Scenic view of a modern bus"
+                                    className="w-full h-full object-cover"
+                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiE5X7t0Cwe2zXVtSpG1xUK9qvg637PBV50MNB7iuGrX52X3gwkmos0x3p-85Ibx5L1mAJvBVZIoNBrkOiiMBfk09fyaOmA0N3ySGVlpPawhRmdEXn8309cSZs6Et4V57hvzKcNTzrUMGWswKXC2sEV51UMPMeTnXh7myEjL6lAomzg0AMaSGVe9nEot5VAoz0AOGC-U0h7sf9XhiADjJxhYCZI3KZPz4ITbgb3WNZ5hvC65E2OTdSVR8YaVI9IXZbYHk6rL3xnXj4"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-4">
+                                    <p className="text-white font-medium text-sm">Express Voyager #802</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-6">
+                                {/* Route Detail */}
+                                <div className="flex flex-col gap-4 relative">
+                                    <div className="absolute left-[11px] top-8 bottom-4 w-0.5 bg-slate-200 dark:bg-slate-700"></div>
+                                    <div className="flex gap-4 items-start">
+                                        <div className="mt-1 relative z-10">
+                                            <div className="w-6 h-6 rounded-full border-4 border-white dark:border-slate-900 bg-primary shadow-sm"></div>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Boarding - 09:00 AM</p>
+                                            <p className="text-slate-900 dark:text-white font-semibold">New York, NY</p>
+                                            <p className="text-slate-500 text-sm">Port Authority Bus Terminal</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4 items-start">
+                                        <div className="mt-1 relative z-10">
+                                            <div className="w-6 h-6 rounded-full border-4 border-white dark:border-slate-900 bg-slate-400 dark:bg-slate-600 shadow-sm"></div>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Dropping - 01:30 PM</p>
+                                            <p className="text-slate-900 dark:text-white font-semibold">Washington, DC</p>
+                                            <p className="text-slate-500 text-sm">Union Station</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <hr className="border-slate-100 dark:border-slate-800" />
+
+                                {/* Selected Seats */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <p className="text-slate-500 font-medium">Selected Seats</p>
+                                        <span className="text-primary text-sm font-bold">{selectedSeats.length} Seats</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedSeats.length > 0 ? (
+                                            selectedSeats.map(seat => (
+                                                <span key={seat.seatNumber} className="inline-flex items-center px-3 py-1 rounded-md bg-primary text-white text-sm font-bold shadow-sm animate-fade-in">
+                                                    {seat.seatNumber}
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleSeatClick(seat.seatNumber); }}
+                                                        className="ml-2 hover:text-red-200"
+                                                    >
+                                                        <span className="material-symbols-outlined text-xs">close</span>
+                                                    </button>
+                                                </span>
+                                            ))
+                                        ) : (
+                                            <span className="text-sm text-slate-400 italic">No seats selected</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <hr className="border-slate-100 dark:border-slate-800" />
+
+                                {/* Price Breakdown */}
+                                <div className="space-y-3">
+                                    <div className="flex justify-between text-slate-600 dark:text-slate-400 text-sm">
+                                        <span>Seat Fare (x{selectedSeats.length})</span>
+                                        <span>${selectedSeats.reduce((acc, s) => acc + parseFloat(s.price), 0).toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-slate-600 dark:text-slate-400 text-sm">
+                                        <span>Tax & Fees</span>
+                                        <span>$12.50</span>
+                                    </div>
+                                    <div className="flex justify-between text-slate-600 dark:text-slate-400 text-sm">
+                                        <span>Discount</span>
+                                        <span className="text-green-600 dark:text-green-400">-$5.00</span>
+                                    </div>
+                                    <div className="flex justify-between items-center pt-2 mt-2 border-t border-dashed border-slate-200 dark:border-slate-700">
+                                        <span className="font-bold text-slate-900 dark:text-white text-lg">Total</span>
+                                        <span className="font-extrabold text-primary text-2xl">${calculateTotal().toFixed(2)}</span>
+                                    </div>
+                                </div>
+
+                                {/* Action Button */}
+                                <button
+                                    onClick={handleConfirmSeats}
+                                    disabled={selectedSeats.length === 0}
+                                    className="w-full bg-primary hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-primary/25 mt-4 group disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Proceed to Passenger Info
+                                    <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            {/* Footer */}
+            <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 mt-auto py-8">
+                <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 text-sm">
+                    © 2024 BusConnect Inc. All rights reserved.
+                </div>
+            </footer>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default SeatSelection;

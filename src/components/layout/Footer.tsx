@@ -1,41 +1,56 @@
 import type React from "react"
+import { Link } from "react-router-dom"
 
 const Footer: React.FC = () => {
-  return (
-    <footer className="bg-black text-white mt-8 py-8 px-8 bebas-neue neobrutalism-border">
-        <div className="container mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div>
-                <h3 className="text-3xl font-bold mb-4 tracking-widest">BUSTICKETS</h3>
-                <p className="text-sm">Platform terpercaya untuk pemesanan tiket bus online di Indonesia. Mudah, cepat, dan aman.</p>
-                <div className="mt-4 space-y-2 text-sm">
-                    <p>+62 21 1234 5678</p>
-                    <p>info@busticket.com</p>
-                    <p>Jakarta, Indonesia</p>
+    return (
+        <footer className="bg-white border-t border-gray-200 pt-16 pb-8 px-10 font-display">
+            <div className="max-w-[1024px] mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
+                <div className="col-span-1 md:col-span-1">
+                    <div className="flex items-center gap-2 mb-4 text-primary">
+                        <span className="material-symbols-outlined">directions_bus</span>
+                        <span className="text-xl font-bold text-gray-900">BusGo</span>
+                    </div>
+                    <p className="text-gray-500 text-sm leading-relaxed">
+                        Making travel accessible, comfortable, and affordable for everyone. Your journey starts here.
+                    </p>
+                </div>
+                <div>
+                    <h4 className="font-bold text-gray-900 mb-4">Company</h4>
+                    <ul className="space-y-2 text-sm text-gray-500">
+                        <li><Link className="hover:text-primary" to="#">About Us</Link></li>
+                        <li><Link className="hover:text-primary" to="#">Careers</Link></li>
+                        <li><Link className="hover:text-primary" to="#">Press</Link></li>
+                        <li><Link className="hover:text-primary" to="#">Blog</Link></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 className="font-bold text-gray-900 mb-4">Support</h4>
+                    <ul className="space-y-2 text-sm text-gray-500">
+                        <li><Link className="hover:text-primary" to="#">Help Center</Link></li>
+                        <li><Link className="hover:text-primary" to="#">Terms of Service</Link></li>
+                        <li><Link className="hover:text-primary" to="#">Privacy Policy</Link></li>
+                        <li><Link className="hover:text-primary" to="#">Contact Us</Link></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 className="font-bold text-gray-900 mb-4">Follow Us</h4>
+                    <div className="flex gap-4 text-gray-400">
+                        <Link className="hover:text-primary transition-colors" to="#"><span className="material-symbols-outlined">public</span></Link>
+                        <Link className="hover:text-primary transition-colors" to="#"><span className="material-symbols-outlined">share</span></Link>
+                        <Link className="hover:text-primary transition-colors" to="#"><span className="material-symbols-outlined">rss_feed</span></Link>
+                    </div>
                 </div>
             </div>
-
-            <div>
-                <h3 className="text-xl font-bold mb-4 tracking-widest">LAYANAN</h3>
-                <ul className="space-y-2 text-sm">
-                    <li><a href="#" className="hover:text-yellow-400 transition-colors">Cari Bus</a></li>
-                    <li><a href="#" className="hover:text-yellow-400 transition-colors">Rute Populer</a></li>
-                    <li><a href="#" className="hover:text-yellow-400 transition-colors">Promo</a></li>
-                    <li><a href="#" className="hover:text-yellow-400 transition-colors">Bantuan</a></li>
-                </ul>
+            <div className="max-w-[1024px] mx-auto border-t border-gray-100 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-400">
+                <p>© 2023 BusGo Inc. All rights reserved.</p>
+                <div className="flex gap-6">
+                    <Link className="hover:text-gray-600" to="#">Privacy</Link>
+                    <Link className="hover:text-gray-600" to="#">Terms</Link>
+                    <Link className="hover:text-gray-600" to="#">Sitemap</Link>
+                </div>
             </div>
-
-            <div>
-                <h3 className="text-xl font-bold mb-4 tracking-widest">DUKUNGAN</h3>
-                <ul className="space-y-2 text-sm">
-                    <li><a href="#" className="hover:text-yellow-400 transition-colors">FAQ</a></li>
-                    <li><a href="#" className="hover:text-yellow-400 transition-colors">Kontak</a></li>
-                    <li><a href="#" className="hover:text-yellow-400 transition-colors">Kebijakan</a></li>
-                    <li><a href="#" className="hover:text-yellow-400 transition-colors">Syarat & Ketentuan</a></li>
-                </ul>
-            </div>
-        </div>
-    </footer>
-  )
+        </footer>
+    )
 }
 
 export default Footer

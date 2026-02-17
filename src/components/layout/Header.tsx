@@ -1,26 +1,28 @@
 "use client"
-
 import React from "react"
 import { Link } from "react-router-dom"
-import { useDispatch } from "react-redux"
-import { logOut } from "../../features/auth/AuthSlice" 
+
 const Header: React.FC = () => {
-    const dispatch = useDispatch()
-    const handleLogout = () => {
-        dispatch(logOut())
-    }
     return (
-    <header className="bg-black text-white py-4 px-8 bebas-neue neobrutalism-border z-30">
-        <div className="container mx-auto flex justify-between items-center">
-            <Link to="/" className="text-3xl font-bold tracking-widest">BUSTICKETS</Link>
-            <nav className="space-x-8 text-xl">
-                <Link to="/" className="hover:text-yellow-400 transition-colors">BERANDA</Link>
-                <Link to="/" className="hover:text-yellow-400 transition-colors">CARI BUS</Link>
-                <button className="hover:text-yellow-400 transition-colors" onClick={handleLogout}>LOGOUT</button>
-            </nav>
-        </div>
-    </header>
-     )
+        <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#f0f2f4] bg-white px-10 py-3 shadow-sm font-display">
+            <div className="flex items-center gap-4 text-[#111318]">
+                <div className="size-8 text-primary flex items-center justify-center">
+                    <span className="material-symbols-outlined !text-3xl">directions_bus</span>
+                </div>
+                <h2 className="text-[#111318] text-xl font-bold leading-tight tracking-[-0.015em]">BusGo</h2>
+            </div>
+            <div className="flex flex-1 justify-end gap-8">
+                <div className="hidden md:flex items-center gap-9">
+                    <Link className="text-[#111318] hover:text-primary transition-colors text-sm font-medium leading-normal" to="/">Home</Link>
+                    <Link className="text-[#111318] hover:text-primary transition-colors text-sm font-medium leading-normal" to="#">Manage Booking</Link>
+                    <Link className="text-[#111318] hover:text-primary transition-colors text-sm font-medium leading-normal" to="#">Help</Link>
+                </div>
+                <Link to="/login" className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-6 bg-primary hover:bg-blue-700 transition-colors text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                    <span className="truncate">Sign In</span>
+                </Link>
+            </div>
+        </header>
+    )
 }
 
 export default Header

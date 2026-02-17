@@ -1,25 +1,35 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-    content: ["./src/**/*.{html,js,jsx,tsx}"],
-    theme: {
-      extend: {
-        backgroundImage: {
-        'gradient-purple': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  darkMode: "class",
+  content: ["./src/**/*.{html,js,jsx,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        "primary": "#135bec",
+        "primary-hover": "#114ec4",
+        "primary-light": "#ebf1fd",
+        "background-light": "#f6f6f8",
+        "background-dark": "#101622",
       },
       fontFamily: {
-        // 'bebas-neue' adalah nama custom yang kamu gunakan di Tailwind
+        "display": ["Plus Jakarta Sans", "sans-serif"],
         'bebas-neue': ['Bebas Neue', 'sans-serif'], 
-        // 'roboto-mono' adalah nama custom yang kamu gunakan di Tailwind
         'roboto-mono': ['Roboto Mono', 'monospace'],
       },
-      // Kamu bisa menambahkan custom shadow di sini
+      borderRadius: {
+        "DEFAULT": "0.25rem", 
+        "lg": "0.5rem", 
+        "xl": "0.75rem", 
+        "full": "9999px"
+      },
       boxShadow: {
-        // 'neobrutalism' adalah nama custom shadow yang kamu definisikan
         'neobrutalism': '8px 8px 0px black',
         'neobrutalism-sm': '4px 4px 0px black',
       },
-      
-      },
     },
-    plugins: [],
-  }
+  },
+  plugins: [
+    require('@tailwindcss/forms'),
+    require('@tailwindcss/container-queries'),
+  ],
+}

@@ -1,20 +1,20 @@
 export interface PaymentMethod {
-  id: number
-  name: string
-  description: string
-  fee: number
+  id: string;
+  name: string;
 }
 
 export interface Payment {
-  id: number
-  amount: number
-  methodId: number
+  id: string;
+  amount: number;
+  method: string;
+  bookingId: string;
+  status?: string;
 }
 
-export type PaymentStatus = "idle" | "processing" | "success" | "failed"
+export type PaymentStatus = "idle" | "processing" | "success" | "failed";
 
 export interface PaymentState {
-  methods: PaymentMethod[]
-  currentPayment: Payment | null
-  status: PaymentStatus
+  methods: PaymentMethod[];
+  currentPayment: Payment | null;
+  status: PaymentStatus;
 }

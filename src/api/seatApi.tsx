@@ -1,9 +1,7 @@
-export const getBusSeats = async(token: string, scheduleId: string) => {
-    return await fetch(`${import.meta.env.VITE_API_PATH}/seats/${scheduleId}`, {
-        method: 'GET',
-        headers: {
-            'Accept': 'application/json',
-            'Authorization': token
-        }
-    })
-}
+import apiClient from "./apiClient";
+
+import type { SeatMapResponse } from "../features/booking/bookingTypes";
+
+export const getBusSeats = async (scheduleId: string) => {
+    return apiClient.get<SeatMapResponse>(`/seats/${scheduleId}`);
+};

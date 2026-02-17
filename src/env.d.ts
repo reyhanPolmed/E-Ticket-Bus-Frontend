@@ -3,6 +3,9 @@ interface ImportMetaEnv {
   // tambahkan variabel lingkungan lainnya di sini jika diperlukan
 }
 
+
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare module "*.css";

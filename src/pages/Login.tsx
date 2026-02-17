@@ -10,7 +10,7 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [showModal, setShowModal] = useState(false);
-  
+
   const dispatch = useDispatch()
   const navigate = useNavigate()
   // Function to show the modal
@@ -28,16 +28,20 @@ const Login: React.FC = () => {
   // Handle form submission
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    // Authentication logic goes here
-    const response = await LoginUser(email, password)
-    const responseBody = await response.json()
-    console.log(responseBody)
-    if(responseBody.success == true) {
-        dispatch(setCredential({...responseBody}))
-        showMessage("Login berhasil! (Ini hanya demo)");
-        navigate('/')
-    } else {
-        showMessage("login gagal!")
+    try {
+      const response = await LoginUser(email, password);
+      const responseBody = response.data;
+      console.log(responseBody);
+      if (responseBody.status === true || responseBody.success === true) {
+        dispatch(setCredential({ data: responseBody.data }));
+        showMessage("Login berhasil!");
+        navigate("/");
+      } else {
+        showMessage("Login gagal!");
+      }
+    } catch (error: any) {
+      console.error("Login error:", error);
+      showMessage(error.response?.data?.message || "Login gagal!");
     }
   };
   return (

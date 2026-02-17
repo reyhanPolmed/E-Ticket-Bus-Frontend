@@ -26,17 +26,21 @@ const Register: React.FC = () => {
   };
 
   // Handle form submission
-  const handleSubmit = async(e: { preventDefault: () => void }) => {
+  const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    // Logic to handle user registration
-    const response = await RegisterUser(email, firstName, lastName, password, phone);
-    const responseBody = await response.json()
-    if(responseBody.status === "success") {
-        console.log(responseBody)
-        showMessage("Registrasi berhasil! (Ini hanya demo)");
-        navigate('/login')
-    } else {
-        showMessage("register gagal!")
+    try {
+      const response = await RegisterUser(email, firstName, lastName, password, phone);
+      const responseBody = response.data;
+      if (responseBody.success === true || responseBody.status === true || responseBody.status === "success") {
+        console.log(responseBody);
+        showMessage("Registrasi berhasil!");
+        navigate("/login");
+      } else {
+        showMessage("Register gagal!");
+      }
+    } catch (error: any) {
+      console.error("Register error:", error);
+      showMessage(error.response?.data?.message || "Register gagal!");
     }
   };
 
