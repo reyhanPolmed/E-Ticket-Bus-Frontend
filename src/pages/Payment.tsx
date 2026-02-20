@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../features/hooks";
 import { setCurrentPayment, setPaymentStatus } from "../features/payment/paymentSlice";
 import { createPayment } from "../api/paymentApi";
+import { showToast } from "../features/ui/uiSlice";
 
 const Payment: React.FC = () => {
   const navigate = useNavigate();
@@ -68,7 +69,7 @@ const Payment: React.FC = () => {
   const handlePayment = async () => {
     if (!selectedPaymentMethodId || !bookingId) {
       if (!bookingId) {
-        alert("No booking ID found. Please go back and try again.");
+        dispatch(showToast({ message: "Booking ID tidak ditemukan. Silakan kembali dan coba lagi.", type: "error" }));
         return;
       }
       return;
@@ -94,7 +95,7 @@ const Payment: React.FC = () => {
     } catch (error: any) {
       console.error("Payment failed:", error);
       dispatch(setPaymentStatus("failed"));
-      alert(error.response?.data?.message || "Payment failed. Please try again.");
+      dispatch(showToast({ message: error.response?.data?.message || "Pembayaran gagal. Silakan coba lagi.", type: "error" }));
     } finally {
       setIsProcessing(false);
     }

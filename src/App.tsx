@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import BookingSuccess from "./pages/BookingSuccess";
 import RequireAuth from "./components/RequireAuth";
+import Toast from "./components/Toast";
 
 const PrivateRoutes = () => {
   return (
@@ -31,13 +32,16 @@ const PrivateRoutes = () => {
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="*" element={<PrivateRoutes />} />
-      </Routes>
-    </Router>
+    <>
+      <Toast />
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="*" element={<PrivateRoutes />} />
+        </Routes>
+      </Router>
+    </>
   );
 }
 

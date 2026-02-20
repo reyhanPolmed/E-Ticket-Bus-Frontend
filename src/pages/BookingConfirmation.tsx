@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppSelector, useAppDispatch } from "../features/hooks";
 import { setBookingStep, setBookingId } from "../features/booking/bookingSlice";
 import { createBooking } from "../api/bookingApi";
+import { showToast } from "../features/ui/uiSlice";
 
 const BookingConfirmation: React.FC = () => {
   const navigate = useNavigate();
@@ -61,7 +62,7 @@ const BookingConfirmation: React.FC = () => {
       navigate("/payment");
     } catch (error: any) {
       console.error("Failed to create booking:", error);
-      alert(error.response?.data?.message || "Failed to create booking. Please try again.");
+      dispatch(showToast({ message: error.response?.data?.message || "Gagal membuat booking. Silakan coba lagi.", type: "error" }));
     } finally {
       setIsCreating(false);
     }

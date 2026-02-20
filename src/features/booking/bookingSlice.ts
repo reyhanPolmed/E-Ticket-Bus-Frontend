@@ -6,14 +6,28 @@ import type {
   Passenger,
   BookingStep,
 } from "./bookingTypes";
+import { logOut } from "../auth/AuthSlice";
 
-const initialState: BookingState = {
-  currentBooking: null,
-  selectedSeats: [],
-  passengerData: [],
-  bookingStep: "seats",
-  bookingId: null,
+// Load state from sessionStorage
+const loadBookingState = (): BookingState => {
+  try {
+    const saved = sessionStorage.getItem("bookingState");
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error("Failed to load booking state from sessionStorage:", e);
+  }
+  return {
+    currentBooking: null,
+    selectedSeats: [],
+    passengerData: [],
+    bookingStep: "seats",
+    bookingId: null,
+  };
 };
+
+const initialState: BookingState = loadBookingState();
 
 const bookingSlice = createSlice({
   name: "booking",
@@ -45,7 +59,20 @@ const bookingSlice = createSlice({
       state.passengerData = [];
       state.bookingStep = "seats";
       state.bookingId = null;
+      // Clear sessionStorage on reset
+      sessionStorage.removeItem("bookingState");
     },
+  },
+  extraReducers: (builder) => {
+    builder.addCase(logOut, (state) => {
+      // transform to initial state
+      state.currentBooking = null;
+      state.selectedSeats = [];
+      state.passengerData = [];
+      state.bookingStep = "seats";
+      state.bookingId = null;
+      sessionStorage.removeItem("bookingState");
+    });
   },
 });
 

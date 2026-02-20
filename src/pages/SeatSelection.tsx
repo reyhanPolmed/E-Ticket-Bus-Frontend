@@ -6,6 +6,7 @@ import {
     setBookingStep,
 } from "../features/booking/bookingSlice";
 import { getBusSeats } from "../api/seatApi";
+import { showToast } from "../features/ui/uiSlice";
 
 const SeatSelection: React.FC = () => {
     const dispatch = useAppDispatch();
@@ -104,7 +105,7 @@ const SeatSelection: React.FC = () => {
 
     const handleConfirmSeats = () => {
         if (selectedSeats.length === 0) {
-            alert("Please select at least one seat.");
+            dispatch(showToast({ message: "Silakan pilih minimal satu kursi.", type: "warning" }));
             return;
         }
         dispatch(setBookingStep("passengers"));
@@ -150,29 +151,6 @@ const SeatSelection: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-background-light dark:bg-background-dark font-display flex flex-col">
-            {/* Top Navigation */}
-            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <header className="flex items-center justify-between h-16">
-                        <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate('/')}>
-                            <div className="text-primary">
-                                <span className="material-symbols-outlined text-3xl">directions_bus</span>
-                            </div>
-                            <h2 className="text-slate-900 dark:text-white text-xl font-bold tracking-tight">BusConnect</h2>
-                        </div>
-                        <div className="hidden md:flex items-center gap-8">
-                            <nav className="flex gap-6">
-                                <a href="#" className="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary font-medium transition-colors">Home</a>
-                                <a href="#" className="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary font-medium transition-colors">My Bookings</a>
-                                <a href="#" className="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary font-medium transition-colors">Help</a>
-                            </nav>
-                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                                JD
-                            </div>
-                        </div>
-                    </header>
-                </div>
-            </div>
 
             {/* Main Content */}
             <main className="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

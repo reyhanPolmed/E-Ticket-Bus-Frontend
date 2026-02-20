@@ -48,36 +48,7 @@ const SearchResult: React.FC = () => {
       RENDER (NEW MODERN DESIGN)
   ===================== */
   return (
-    <div className="bg-background-light dark:bg-background-dark text-[#111318] dark:text-white font-display min-h-screen flex flex-col">
-      {/* Top Navigation Bar */}
-      <header className="bg-white dark:bg-[#1a202c] border-b border-[#f0f2f4] dark:border-gray-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/")}>
-              <div className="size-8 text-primary bg-primary-light rounded-lg flex items-center justify-center">
-                <span className="material-symbols-outlined text-2xl">directions_bus</span>
-              </div>
-              <h1 className="text-[#111318] dark:text-white text-xl font-bold tracking-tight">BusBooker</h1>
-            </div>
-            {/* Desktop Menu */}
-            <div className="hidden md:flex items-center gap-8">
-              <a className="text-sm font-medium text-gray-600 hover:text-primary dark:text-gray-300 transition-colors" href="#">My Bookings</a>
-              <a className="text-sm font-medium text-gray-600 hover:text-primary dark:text-gray-300 transition-colors" href="#">Help</a>
-              <div className="flex items-center gap-2">
-                <div className="size-8 rounded-full bg-gray-200 overflow-hidden" data-alt="User Avatar">
-                  <img alt="User Profile" className="w-full h-full object-cover" data-alt="User profile avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxbIXe3Ie-3nOriDpvS1w8tGWKylIJgEJTfK66cCw2_OtxJTKPz4w5wmwhK6KiBo3vFtYK9wpCfVkFflZAzI0xU6_CgRV5SRywR1Q4UR45czpnU_g_qt4PNb2H8DOMpWxkvJMbum3AKNB0JX-lxVvzqgjD6afsTYSL9xDlykQAM79m9-9X-Q4BDJn8DXSD2wGdrbiMN4gvRHikTETkT3QUeQ_EAlPSdwWWqdc2U3r0_URgh3J2ZgmMxiDqvuCwzbB1EwvZjXx3H2vb" />
-                </div>
-                <span className="text-sm font-medium dark:text-white">John Doe</span>
-              </div>
-            </div>
-            {/* Mobile Menu Button */}
-            <div className="md:hidden">
-              <span className="material-symbols-outlined text-gray-600 dark:text-gray-300 cursor-pointer">menu</span>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="bg-background-light dark:bg-background-dark text-[#111318] dark:text-white font-display flex flex-col">
 
       {/* Search Summary Bar (Sub-header) */}
       <div className="bg-white dark:bg-[#1a202c] shadow-sm relative z-40">
@@ -333,18 +304,6 @@ const SearchResult: React.FC = () => {
           </section>
         </div>
       </main>
-
-      {/* Footer Simple */}
-      <footer className="bg-white dark:bg-[#1a202c] border-t border-gray-100 dark:border-gray-800 mt-12 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-gray-500">© 2024 BusBooker Inc. All rights reserved.</p>
-          <div className="flex gap-6">
-            <a className="text-sm text-gray-500 hover:text-primary" href="#">Privacy Policy</a>
-            <a className="text-sm text-gray-500 hover:text-primary" href="#">Terms of Service</a>
-            <a className="text-sm text-gray-500 hover:text-primary" href="#">Cookie Policy</a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };

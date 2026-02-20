@@ -1,11 +1,16 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit"
-import type { UIState, Notification } from "./uiTypes"
+import type { UIState, Notification, ToastType } from "./uiTypes"
 
 const initialState: UIState = {
   modals: {},
   notifications: [],
   loading: {},
   theme: "light",
+  toast: {
+    show: false,
+    message: "",
+    type: "info",
+  },
 }
 
 const uiSlice = createSlice({
@@ -27,9 +32,28 @@ const uiSlice = createSlice({
     setTheme: (state, action: PayloadAction<"light" | "dark">) => {
       state.theme = action.payload
     },
+    showToast: (
+      state,
+      action: PayloadAction<{ message: string; type: ToastType }>
+    ) => {
+      state.toast = {
+        show: true,
+        message: action.payload.message,
+        type: action.payload.type,
+      }
+    },
+    hideToast: (state) => {
+      state.toast.show = false
+    },
   },
 })
 
-export const { toggleModal, addNotification, setLoading, setTheme } =
-  uiSlice.actions
+export const {
+  toggleModal,
+  addNotification,
+  setLoading,
+  setTheme,
+  showToast,
+  hideToast,
+} = uiSlice.actions
 export default uiSlice.reducer

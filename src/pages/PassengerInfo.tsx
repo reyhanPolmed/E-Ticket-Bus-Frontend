@@ -18,6 +18,7 @@ import {
   setBookingStep,
 } from "../features/booking/bookingSlice";
 import type { Passenger } from "../features/booking/bookingTypes";
+import { showToast } from "../features/ui/uiSlice";
 
 const PassengerInfo: React.FC = () => {
   const navigate = useNavigate();
@@ -106,7 +107,7 @@ const PassengerInfo: React.FC = () => {
     );
 
     if (!isValid) {
-      alert("Please fill in all required fields.");
+      dispatch(showToast({ message: "Harap isi semua field yang wajib diisi.", type: "warning" }));
       return;
     }
 

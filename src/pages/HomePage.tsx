@@ -4,9 +4,14 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { setCriteria, setResults } from "../features/search/searchSlice";
 import { type RootState } from "../features/store";
-import TerminalDropdown from "../components/TerminalDropdown";
 import { getTerminals } from "../api/terminalApi";
 import { searchSchedules } from "../api/scheduleApi";
+import { getMyBookings, getBookingDetails } from "../api/bookingApi";
+import { showToast } from "../features/ui/uiSlice";
+import PendingBookingModal from "../components/PendingBookingModal";
+import { setCurrentBooking, setBookingId, setPassengerData, setBookingStep, setSelectedSeats } from "../features/booking/bookingSlice";
+import { selectCurrentUser } from "../features/auth/AuthSlice";
+import type { Booking, Seat, Passenger } from "../features/booking/bookingTypes";
 
 type Terminal = {
   id: string;
@@ -22,6 +27,11 @@ const HomePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   // --- LOGIC: FETCH TERMINALS FROM API ---
+  const isAuthenticated = useSelector(selectCurrentUser);
+  const [pendingBooking, setPendingBooking] = useState<Booking | null>(null);
+  const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
+
   useEffect(() => {
     const fetchTerminals = async () => {
       try {
@@ -38,11 +48,95 @@ const HomePage: React.FC = () => {
     fetchTerminals();
   }, []);
 
+  // --- LOGIC: CHECK PENDING BOOKINGS ---
+  useEffect(() => {
+    if (isAuthenticated) {
+      const checkPendingBookings = async () => {
+        try {
+          const response = await getMyBookings("PENDING");
+          console.log("response: ", response);
+          const bookings =
+            response.data?.data?.bookings ||
+            response.data?.bookings ||
+            [];
+          // Assuming API returns array, get the latest one
+          if (Array.isArray(bookings) && bookings.length > 0) {
+            // Sort by createdAt desc if needed, or take first if API orders it
+            setPendingBooking(bookings[0]);
+            setIsResumeModalOpen(true);
+          }
+        } catch (error) {
+          console.error("Failed to check pending bookings:", error);
+        }
+      };
+      checkPendingBookings();
+    }
+  }, [isAuthenticated]);
+
+  const handleContinueBooking = async () => {
+    if (!pendingBooking) return;
+    setIsResuming(true);
+    try {
+      // 1. Fetch full details
+      const response = await getBookingDetails(pendingBooking.id);
+      const fullBooking: Booking = response.data?.data || response.data;
+      console.log("Resuming booking:", fullBooking);
+
+      // 2. Map to Redux State
+      // Map Passengers
+      const passengers: Passenger[] = (fullBooking.bookingDetails || []).map(detail => ({
+        firstName: detail.passengerName || "",
+        lastName: detail.passengerName || "",
+        identityType: (detail.passengerIdType as "KTP" | "PASSPORT" | "SIM") || "KTP",
+        identityNumber: detail.passengerIdNumber,
+        seatNumber: detail.seatNumber,
+        age: 0, // Not in BookingDetail, defaulting
+        phone: detail.passengerPhone,
+        email: detail.passengerEmail,
+        gender: "male", // Defaulting
+        nationality: "ID", // Defaulting
+      }));
+
+      // Map Seats (Mocking availability since they are already booked by user)
+      const seats: Seat[] = (fullBooking.bookingDetails || []).map(detail => ({
+        seatNumber: detail.seatNumber,
+        row: 0, // Unknown
+        position: 0, // Unknown
+        isAvailable: false,
+        price: detail.price,
+        seatType: "Standard",
+      }));
+
+      // Dispatch Actions
+      dispatch(setBookingId(fullBooking.id));
+      dispatch(setCurrentBooking(fullBooking));
+      dispatch(setPassengerData(passengers));
+      dispatch(setSelectedSeats(seats));
+      dispatch(setBookingStep("payment"));
+
+      // 3. Navigate
+      navigate("/payment");
+    } catch (error) {
+      console.error("Failed to resume booking:", error);
+      dispatch(showToast({ message: "Gagal melanjutkan pemesanan.", type: "error" }));
+    } finally {
+      setIsResuming(false);
+      setIsResumeModalOpen(false);
+    }
+  };
+
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(amount);
+
   // --- LOGIC: SEARCH VIA API ---
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!criteria.origin || !criteria.destination || !criteria.date) {
-      alert("Please fill in Origin, Destination, and Date.");
+      dispatch(showToast({ message: "Silakan isi Asal, Tujuan, dan Tanggal.", type: "warning" }));
       return;
     }
     setLoading(true);
@@ -59,7 +153,7 @@ const HomePage: React.FC = () => {
       navigate("/result");
     } catch (error) {
       console.error("Search failed:", error);
-      alert("Search failed. Please try again.");
+      dispatch(showToast({ message: "Pencarian gagal. Silakan coba lagi.", type: "error" }));
     } finally {
       setLoading(false);
     }
@@ -91,21 +185,6 @@ const HomePage: React.FC = () => {
                     <span className="material-symbols-outlined text-gray-400">trip_origin</span>
                   </div>
                   {/* Using Custom Dropdown logic but styled invisibly to match */}
-                  <TerminalDropdown
-                    Terminals={terminals}
-                    label=""
-                    placeholder="Enter origin city"
-                    onSelect={(t) => dispatch(setCriteria({ origin: t }))}
-                  // We might need to adjust TerminalDropdown to accept a 'customInputClass' prop or stick with standard styling. 
-                  // For now, I'll rely on TerminalDropdown's internal style but it might clash. 
-                  // To perfectly match, I should have refactored TerminalDropdown. 
-                  // I will wrap it in a div that overrides styles if needed, but TerminalDropdown has hardcoded styles. 
-                  // HACK: I will recreate a simple select here for perfect visual match if TerminalDropdown is too rigid.
-                  // But I need the ID. Let's use a standard select with the class from the design.
-                  />
-                  {/* Override TerminalDropdown for this specific UI to ensure it matches the design exactly. 
-                                        Since TerminalDropdown has specific 'neobrutalist' styles (border-black, etc), 
-                                        I'll manually render a select here for the 'BusGo' theme. */}
                   <select
                     className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm transition-all appearance-none"
                     value={criteria.origin?.id || ""}
@@ -119,6 +198,10 @@ const HomePage: React.FC = () => {
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
                   </select>
+                  {/* Override TerminalDropdown for this specific UI to ensure it matches the design exactly. 
+                                        Since TerminalDropdown has specific 'neobrutalist' styles (border-black, etc), 
+                                        I'll manually render a select here for the 'BusGo' theme. */}
+
                 </div>
               </div>
 
@@ -342,6 +425,19 @@ const HomePage: React.FC = () => {
           <div className="md:w-1/2 bg-blue-100 min-h-[300px] bg-cover bg-center" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuBjayGdXgmPfZvRWkmH0WSMc6qcEfXc8Auxq8bSOwJnX6scGLTo5C0oRc5222aOCsJenLiYAogpc3gMojNAo44ldOqzydlkeaZKaKCBt2PySTY47TRMehiKNdBbSkN2PqNqKEj8Ws5-bZARnoWI8FT_33P4tkvfa2JwpxEsVBdWsEA3-iip87ji_RF-JqvLKTlryumPH62ixvQuYXukempUTIfqm1CUjJr3G254GWTmYL6neZTjVnNeF5HMmVT6AwOTllYiLSs9T7Se")' }}></div>
         </div>
       </div>
+
+      <PendingBookingModal
+        isOpen={isResumeModalOpen}
+        onContinue={handleContinueBooking}
+        onDiscard={() => setIsResumeModalOpen(false)}
+        isLoading={isResuming}
+        bookingInfo={pendingBooking ? {
+          origin: pendingBooking.schedule?.route?.originalTerminal?.name || "Unknown",
+          destination: pendingBooking.schedule?.route?.destinationTerminal?.name || "Unknown",
+          totalPrice: formatCurrency(Number(pendingBooking.totalPrice)),
+          passengers: pendingBooking.totalPassengers || 1,
+        } : null}
+      />
     </div>
   );
 };
