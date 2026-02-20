@@ -11,3 +11,7 @@ export const createPayment = async (payload: {
 }) => {
     return apiClient.post("/payments", payload);
 };
+
+export const verifyPayment = async (id: string) => {
+    return apiClient.post(`/payments/${id}/verify`);
+};

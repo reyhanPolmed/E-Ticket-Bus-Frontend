@@ -2,8 +2,15 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../features/hooks";
 import { setCurrentPayment, setPaymentStatus } from "../features/payment/paymentSlice";
-import { createPayment } from "../api/paymentApi";
+import { createPayment, verifyPayment } from "../api/paymentApi";
 import { showToast } from "../features/ui/uiSlice";
+
+// Declare global window interface for Snap
+declare global {
+  interface Window {
+    snap: any;
+  }
+}
 
 const Payment: React.FC = () => {
   const navigate = useNavigate();
@@ -66,36 +73,88 @@ const Payment: React.FC = () => {
     5: "Visa",
   };
 
+
+
   const handlePayment = async () => {
-    if (!selectedPaymentMethodId || !bookingId) {
-      if (!bookingId) {
-        dispatch(showToast({ message: "Booking ID tidak ditemukan. Silakan kembali dan coba lagi.", type: "error" }));
-        return;
-      }
+    if (!bookingId) {
+      dispatch(showToast({ message: "Booking ID tidak ditemukan. Silakan kembali dan coba lagi.", type: "error" }));
       return;
     }
+
+    // Midtrans Snap doesn't require selecting a method upfront in the same way, 
+    // but if we want to pass it to backend (optional depending on implementation), keep it.
+    // The previous implementation sent 'method' and 'amount'. 
+    // Now we need to get the Snap Token.
+
     setIsProcessing(true);
     try {
       const response = await createPayment({
         bookingId: bookingId,
-        method: paymentMethodMap[selectedPaymentMethodId] || "BCA",
+        // If your backend expects a 'method' even for Snap (to filter or log), send it.
+        // Otherwise, Snap handles the method selection on its popup.
+        // We'll keep sending it as per existing logic if backend needs it, 
+        // or just default to something if backend is flexible.
+        method: selectedPaymentMethodId ? paymentMethodMap[selectedPaymentMethodId] : "BCA",
         amount: totalAmount,
       });
+
       console.log("Payment response:", response);
-      const paymentData = response.data?.data || response.data;
-      dispatch(setCurrentPayment({
-        id: paymentData.id || paymentData._id || String(Date.now()),
-        amount: totalAmount,
-        method: paymentMethodMap[selectedPaymentMethodId] || "BCA",
-        bookingId: bookingId,
-        status: "success",
-      }));
-      dispatch(setPaymentStatus("success"));
-      navigate("/success");
+      // Assuming backend returns { token: "SNAP_TOKEN", ... }
+      // Adjust based on actual backend response structure for Snap
+      const snapToken = response.data?.token || response.data?.data?.token;
+
+      if (snapToken) {
+        window.snap.pay(snapToken, {
+          onSuccess: async function (result: any) {
+            console.log("Payment success:", result);
+            try {
+              // Trigger backend verification
+              await verifyPayment(result.order_id);
+
+              dispatch(setCurrentPayment({
+                id: result.order_id || String(Date.now()),
+                amount: totalAmount,
+                method: result.payment_type || "Midtrans",
+                bookingId: bookingId,
+                status: "success",
+              }));
+              dispatch(setPaymentStatus("success"));
+              navigate("/success");
+            } catch (error) {
+              console.error("Verification failed:", error);
+              dispatch(showToast({ message: "Gagal memverifikasi pembayaran. Silakan hubungi admin.", type: "error" }));
+            }
+          },
+          onPending: async function (result: any) {
+            console.log("Payment pending:", result);
+            try {
+              // Also trigger verification for pending to update status in DB
+              await verifyPayment(result.order_id);
+              dispatch(showToast({ message: "Menunggu pembayaran...", type: "info" }));
+            } catch (error) {
+              console.error("Verification failed on pending:", error);
+            }
+          },
+          onError: function (result: any) {
+            console.log("Payment error:", result);
+            dispatch(setPaymentStatus("failed"));
+            dispatch(showToast({ message: "Pembayaran gagal!", type: "error" }));
+          },
+          onClose: function () {
+            console.log("Customer closed the popup without finishing the payment");
+            dispatch(showToast({ message: "Pembayaran dibatalkan.", type: "warning" }));
+          }
+        });
+      } else {
+        // Fallback if no token (maybe backend still uses old logic?)
+        // Or throw error
+        throw new Error("Gagal mendapatkan token pembayaran.");
+      }
+
     } catch (error: any) {
-      console.error("Payment failed:", error);
+      console.error("Payment initiation failed:", error);
       dispatch(setPaymentStatus("failed"));
-      dispatch(showToast({ message: error.response?.data?.message || "Pembayaran gagal. Silakan coba lagi.", type: "error" }));
+      dispatch(showToast({ message: error.response?.data?.message || "Gagal memulai pembayaran.", type: "error" }));
     } finally {
       setIsProcessing(false);
     }
