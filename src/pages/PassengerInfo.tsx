@@ -19,6 +19,7 @@ import {
 } from "../features/booking/bookingSlice";
 import type { Passenger } from "../features/booking/bookingTypes";
 import { showToast } from "../features/ui/uiSlice";
+import { getMyBookings, getBookingDetails } from "../api/bookingApi";
 
 const PassengerInfo: React.FC = () => {
   const navigate = useNavigate();
@@ -26,6 +27,8 @@ const PassengerInfo: React.FC = () => {
 
   // --- REDUX STATE ---
   const { selectedSeats, currentBooking } = useAppSelector((state) => state.booking);
+  const { criteria } = useAppSelector((state) => state.search);
+  const [checkingStatus, setCheckingStatus] = useState(true);
 
   // --- LOCAL STATE ---
   // Initialize passengers based on selected seats
@@ -49,11 +52,69 @@ const PassengerInfo: React.FC = () => {
   const [useSameContact, setUseSameContact] = useState(false);
 
   useEffect(() => {
-    if (selectedSeats.length === 0) {
-      // Redirect to seat selection if no seats selected
-      navigate("/seat-selection");
-    }
-  }, [selectedSeats, navigate]);
+    const verifyBookingGuard = async () => {
+      try {
+        // 1. Check if user has a pending booking in database
+        const response = await getMyBookings("PENDING");
+        const bookings = response.data?.data?.bookings || response.data?.bookings || [];
+        if (Array.isArray(bookings) && bookings.length > 0) {
+          const pendingBooking = bookings[0];
+          dispatch(showToast({ 
+            message: "Kamu memiliki pemesanan yang belum dibayar. Selesaikan pembayaran terlebih dahulu.", 
+            type: "warning" 
+          }));
+
+          const detailsRes = await getBookingDetails(pendingBooking.id);
+          const bookingDetails = detailsRes.data?.data || detailsRes.data;
+
+          if (bookingDetails.payments && bookingDetails.payments.length > 0) {
+            const latestPayment = bookingDetails.payments[bookingDetails.payments.length - 1];
+            const paymentStatusUpper = latestPayment.status?.toUpperCase();
+            if (paymentStatusUpper === "PENDING" || paymentStatusUpper === "PENDING_PAYMENT") {
+              navigate("/waiting-payment", {
+                state: {
+                  bookingId: pendingBooking.id,
+                  orderId: bookingDetails.bookingCode,
+                  amount: Number(bookingDetails.totalPrice),
+                  paymentType: latestPayment.method || "bank_transfer",
+                  vaNumber: latestPayment.paymentCode || "",
+                  bank: "Bank",
+                }
+              });
+              return;
+            }
+          }
+          navigate("/payment");
+          return;
+        }
+
+        // 2. Check if active draft exists in Redux (must have selected schedule and seats)
+        if (!currentBooking) {
+          dispatch(showToast({ 
+            message: "Silakan pilih rute dan jadwal bus terlebih dahulu.", 
+            type: "warning" 
+          }));
+          navigate("/");
+          return;
+        }
+
+        if (selectedSeats.length === 0) {
+          dispatch(showToast({ 
+            message: "Silakan pilih kursi terlebih dahulu.", 
+            type: "warning" 
+          }));
+          navigate("/seat");
+          return;
+        }
+      } catch (error) {
+        console.error("Guard check failed in PassengerInfo:", error);
+      } finally {
+        setCheckingStatus(false);
+      }
+    };
+
+    verifyBookingGuard();
+  }, [currentBooking, selectedSeats, navigate, dispatch]);
 
   // Handle input changes
   const handleChange = (
@@ -120,13 +181,33 @@ const PassengerInfo: React.FC = () => {
     navigate(-1);
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0
+    }).format(amount);
+  };
+
   // Pricing from the actual booking
   const ticketPrice = parseFloat(currentBooking?.totalPrice || "0");
-  const tax = 5.0;
-  const totalPrice = (ticketPrice * passengers.length) + tax;
+  const tax = 5000;
+  const discount = 2000;
+  const totalPrice = Math.max(0, (ticketPrice * passengers.length) + tax - discount);
 
 
-  if (selectedSeats.length === 0) return null; // or loading spinner
+  if (checkingStatus) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 font-display text-slate-800 dark:text-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+          <p className="font-semibold text-lg text-slate-600 dark:text-slate-300">Memverifikasi status pemesanan...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedSeats.length === 0 || !currentBooking) return null; // or loading spinner
 
   return (
     <div className="bg-[#f6f6f8] dark:bg-[#101622] font-sans text-[#111318] min-h-screen flex flex-col">
@@ -162,7 +243,7 @@ const PassengerInfo: React.FC = () => {
                 Bus Passenger Details
               </h2>
               <p className="text-[#616f89] dark:text-gray-400 text-lg">
-                Please fill in the details for your upcoming trip to Manchester.
+                Please fill in the details for your upcoming trip from {criteria.origin?.name || "Origin"} to {criteria.destination?.name || "Destination"}.
               </p>
             </div>
 
@@ -338,7 +419,9 @@ const PassengerInfo: React.FC = () => {
                   <h3 className="font-bold text-lg mb-1">Trip Summary</h3>
                   <div className="flex items-center gap-2 text-[#eef4ff] text-sm">
                     <Calendar size={16} />
-                    <span>Fri, 24 Oct • 08:00 AM</span>
+                    <span>
+                      {criteria.date ? new Date(criteria.date).toLocaleDateString("id-ID", { weekday: 'short', day: 'numeric', month: 'short' }) : "Date"} • {currentBooking?.schedule?.departureTime || "08:00 AM"}
+                    </span>
                   </div>
                 </div>
 
@@ -351,9 +434,9 @@ const PassengerInfo: React.FC = () => {
                         Origin
                       </p>
                       <p className="text-[#111318] dark:text-white font-bold text-base leading-tight">
-                        London Victoria
+                        {criteria.origin?.city || "Origin"}
                       </p>
-                      <p className="text-xs text-[#616f89] mt-0.5">Coach Station</p>
+                      <p className="text-xs text-[#616f89] mt-0.5">{criteria.origin?.name || "Terminal"}</p>
                     </div>
                     <div className="relative">
                       <div className="absolute -left-[21px] top-1 w-3.5 h-3.5 rounded-full bg-[#135bec] border-2 border-[#135bec]"></div>
@@ -361,10 +444,10 @@ const PassengerInfo: React.FC = () => {
                         Destination
                       </p>
                       <p className="text-[#111318] dark:text-white font-bold text-base leading-tight">
-                        Manchester
+                        {criteria.destination?.city || "Destination"}
                       </p>
                       <p className="text-xs text-[#616f89] mt-0.5">
-                        Shudehill Interchange
+                        {criteria.destination?.name || "Terminal"}
                       </p>
                     </div>
                   </div>
@@ -379,9 +462,9 @@ const PassengerInfo: React.FC = () => {
                       </div>
                       <div>
                         <p className="text-sm font-bold text-[#111318] dark:text-white">
-                          Express 404
+                          {currentBooking?.schedule?.bus?.busNumber || "Express Voyager"}
                         </p>
-                        <p className="text-xs text-[#616f89]">National Express</p>
+                        <p className="text-xs text-[#616f89]">{currentBooking?.schedule?.bus?.busType || "Premium AC Seater"}</p>
                       </div>
                     </div>
                     <div className="flex justify-between items-center text-sm">
@@ -411,7 +494,7 @@ const PassengerInfo: React.FC = () => {
                         Ticket Fare (x{passengers.length})
                       </span>
                       <span className="font-medium text-[#111318] dark:text-white">
-                        ${(ticketPrice * passengers.length).toFixed(2)}
+                        {formatCurrency(ticketPrice * passengers.length)}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
@@ -419,7 +502,15 @@ const PassengerInfo: React.FC = () => {
                         Taxes & Fees
                       </span>
                       <span className="font-medium text-[#111318] dark:text-white">
-                        ${tax.toFixed(2)}
+                        {formatCurrency(tax)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-[#616f89] dark:text-gray-400">
+                        Discount
+                      </span>
+                      <span className="font-medium text-green-600 dark:text-green-400">
+                        -{formatCurrency(discount)}
                       </span>
                     </div>
                   </div>
@@ -428,7 +519,7 @@ const PassengerInfo: React.FC = () => {
                       Total Price
                     </span>
                     <span className="text-2xl font-bold text-[#135bec]">
-                      ${totalPrice.toFixed(2)}
+                      {formatCurrency(totalPrice)}
                     </span>
                   </div>
                 </div>

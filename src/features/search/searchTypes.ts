@@ -81,4 +81,5 @@ export interface SearchState {
   results: Schedule[];
   filters: FilterState;
   pagination: PaginationState;
+  recommendations?: { date: string; count: number }[];
 }

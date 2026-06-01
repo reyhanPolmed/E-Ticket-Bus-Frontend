@@ -6,6 +6,7 @@ import {
     setBookingStep,
 } from "../features/booking/bookingSlice";
 import { getBusSeats } from "../api/seatApi";
+import { getMyBookings, getBookingDetails } from "../api/bookingApi";
 import { showToast } from "../features/ui/uiSlice";
 
 const SeatSelection: React.FC = () => {
@@ -14,6 +15,7 @@ const SeatSelection: React.FC = () => {
 
     // --- LOCAL STATE ---
     const [currentDeck, setCurrentDeck] = useState<'lower' | 'upper'>('lower');
+    const [checkingStatus, setCheckingStatus] = useState(true);
     // Store full seat details to pass to Redux
     const [allSeats, setAllSeats] = useState<{
         id: string;
@@ -29,6 +31,68 @@ const SeatSelection: React.FC = () => {
     const { currentBooking, selectedSeats } = useAppSelector(
         (state) => state.booking
     );
+    const { criteria } = useAppSelector(
+        (state) => state.search
+    );
+
+    // --- GUARD: BOOKING STATUS CHECK ---
+    useEffect(() => {
+        const verifyBookingGuard = async () => {
+            try {
+                // 1. Check if user has a pending booking in the database
+                const response = await getMyBookings("PENDING");
+                const bookings = response.data?.data?.bookings || response.data?.bookings || [];
+                if (Array.isArray(bookings) && bookings.length > 0) {
+                    const pendingBooking = bookings[0];
+                    dispatch(showToast({ 
+                        message: "Kamu memiliki pemesanan yang belum dibayar. Selesaikan pembayaran terlebih dahulu.", 
+                        type: "warning" 
+                    }));
+                    
+                    // Fetch details to check payments
+                    const detailsRes = await getBookingDetails(pendingBooking.id);
+                    const bookingDetails = detailsRes.data?.data || detailsRes.data;
+
+                    if (bookingDetails.payments && bookingDetails.payments.length > 0) {
+                        const latestPayment = bookingDetails.payments[bookingDetails.payments.length - 1];
+                        const paymentStatusUpper = latestPayment.status?.toUpperCase();
+                        if (paymentStatusUpper === "PENDING" || paymentStatusUpper === "PENDING_PAYMENT") {
+                            navigate("/waiting-payment", {
+                                state: {
+                                    bookingId: pendingBooking.id,
+                                    orderId: bookingDetails.bookingCode,
+                                    amount: Number(bookingDetails.totalPrice),
+                                    paymentType: latestPayment.method || "bank_transfer",
+                                    vaNumber: latestPayment.paymentCode || "",
+                                    bank: "Bank",
+                                }
+                            });
+                            return;
+                        }
+                    }
+                    // Redirect to payment if no active payment generated yet
+                    navigate("/payment");
+                    return;
+                }
+
+                // 2. Check if active draft exists in Redux (must have selected a bus schedule)
+                if (!currentBooking || !currentBooking.scheduleId) {
+                    dispatch(showToast({ 
+                        message: "Silakan pilih rute dan jadwal bus terlebih dahulu.", 
+                        type: "warning" 
+                    }));
+                    navigate("/");
+                    return;
+                }
+            } catch (error) {
+                console.error("Guard check failed in SeatSelection:", error);
+            } finally {
+                setCheckingStatus(false);
+            }
+        };
+
+        verifyBookingGuard();
+    }, [currentBooking, navigate, dispatch]);
 
     // --- FETCH SEATS FROM API ---
     useEffect(() => {
@@ -112,9 +176,16 @@ const SeatSelection: React.FC = () => {
         navigate("/passenger-data");
     };
 
+    const formatCurrency = (amount: number) =>
+        new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency: "IDR",
+            minimumFractionDigits: 0,
+        }).format(amount);
+
     const calculateTotal = () => {
-        const tax = 12.50; // Flat tax for demo
-        const discount = 5.00; // Flat discount for demo
+        const tax = 5000; // Flat service fee/tax Rp 5.000
+        const discount = 2000; // Flat discount Rp 2.000
 
         const subtotal = selectedSeats.reduce((acc, seat) => {
             return acc + parseFloat(seat.price || "0");
@@ -131,6 +202,17 @@ const SeatSelection: React.FC = () => {
     }
 
     // --- GUARD ---
+    if (checkingStatus) {
+        return (
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 font-display text-slate-800 dark:text-white">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+                    <p className="font-semibold text-lg text-slate-600 dark:text-slate-300">Memverifikasi status pemesanan...</p>
+                </div>
+            </div>
+        );
+    }
+
     if (!currentBooking) {
         // Redirect or show empty state if accessed directly without booking
         // For dev ease, we might render anyway, but let's keep it safe
@@ -168,16 +250,18 @@ const SeatSelection: React.FC = () => {
                             <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Select Your Seats</h1>
                             <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                                 <span className="material-symbols-outlined text-lg">calendar_today</span>
-                                <span>Mon, 12 Oct • 09:00 AM</span>
+                                <span>
+                                    {criteria.date ? new Date(criteria.date).toLocaleDateString("id-ID", { weekday: 'short', day: 'numeric', month: 'short' }) : "Date"} • {currentBooking?.schedule?.departureTime || "09:00 AM"}
+                                </span>
                                 <span className="mx-2">•</span>
                                 <span className="material-symbols-outlined text-lg">route</span>
-                                <span>New York to Washington DC</span>
+                                <span>{criteria.origin?.name || "Origin"} to {criteria.destination?.name || "Destination"}</span>
                             </div>
                         </div>
                         <div className="hidden md:block">
                             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
                                 <span className="material-symbols-outlined text-sm">directions_bus</span>
-                                Express Voyager (AC Seater)
+                                {currentBooking?.schedule?.bus?.busNumber || "Express Voyager"} ({currentBooking?.schedule?.bus?.busType || "AC Seater"})
                             </div>
                         </div>
                     </div>
@@ -355,7 +439,7 @@ const SeatSelection: React.FC = () => {
                                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiE5X7t0Cwe2zXVtSpG1xUK9qvg637PBV50MNB7iuGrX52X3gwkmos0x3p-85Ibx5L1mAJvBVZIoNBrkOiiMBfk09fyaOmA0N3ySGVlpPawhRmdEXn8309cSZs6Et4V57hvzKcNTzrUMGWswKXC2sEV51UMPMeTnXh7myEjL6lAomzg0AMaSGVe9nEot5VAoz0AOGC-U0h7sf9XhiADjJxhYCZI3KZPz4ITbgb3WNZ5hvC65E2OTdSVR8YaVI9IXZbYHk6rL3xnXj4"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-4">
-                                    <p className="text-white font-medium text-sm">Express Voyager #802</p>
+                                    <p className="text-white font-medium text-sm">{currentBooking?.schedule?.bus?.busNumber || "Express Voyager"}</p>
                                 </div>
                             </div>
 
@@ -368,9 +452,9 @@ const SeatSelection: React.FC = () => {
                                             <div className="w-6 h-6 rounded-full border-4 border-white dark:border-slate-900 bg-primary shadow-sm"></div>
                                         </div>
                                         <div>
-                                            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Boarding - 09:00 AM</p>
-                                            <p className="text-slate-900 dark:text-white font-semibold">New York, NY</p>
-                                            <p className="text-slate-500 text-sm">Port Authority Bus Terminal</p>
+                                            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Boarding - {currentBooking?.schedule?.departureTime || "09:00 AM"}</p>
+                                            <p className="text-slate-900 dark:text-white font-semibold">{criteria.origin?.city || "Origin"}</p>
+                                            <p className="text-slate-500 text-sm">{criteria.origin?.name || "Terminal"}</p>
                                         </div>
                                     </div>
                                     <div className="flex gap-4 items-start">
@@ -378,9 +462,9 @@ const SeatSelection: React.FC = () => {
                                             <div className="w-6 h-6 rounded-full border-4 border-white dark:border-slate-900 bg-slate-400 dark:bg-slate-600 shadow-sm"></div>
                                         </div>
                                         <div>
-                                            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Dropping - 01:30 PM</p>
-                                            <p className="text-slate-900 dark:text-white font-semibold">Washington, DC</p>
-                                            <p className="text-slate-500 text-sm">Union Station</p>
+                                            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Dropping - {currentBooking?.schedule?.arrivalTime || "01:30 PM"}</p>
+                                            <p className="text-slate-900 dark:text-white font-semibold">{criteria.destination?.city || "Destination"}</p>
+                                            <p className="text-slate-500 text-sm">{criteria.destination?.name || "Terminal"}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -418,19 +502,19 @@ const SeatSelection: React.FC = () => {
                                 <div className="space-y-3">
                                     <div className="flex justify-between text-slate-600 dark:text-slate-400 text-sm">
                                         <span>Seat Fare (x{selectedSeats.length})</span>
-                                        <span>${selectedSeats.reduce((acc, s) => acc + parseFloat(s.price), 0).toFixed(2)}</span>
+                                        <span>{formatCurrency(selectedSeats.reduce((acc, s) => acc + parseFloat(s.price), 0))}</span>
                                     </div>
                                     <div className="flex justify-between text-slate-600 dark:text-slate-400 text-sm">
                                         <span>Tax & Fees</span>
-                                        <span>$12.50</span>
+                                        <span>{formatCurrency(5000)}</span>
                                     </div>
                                     <div className="flex justify-between text-slate-600 dark:text-slate-400 text-sm">
                                         <span>Discount</span>
-                                        <span className="text-green-600 dark:text-green-400">-$5.00</span>
+                                        <span className="text-green-600 dark:text-green-400">-{formatCurrency(2000)}</span>
                                     </div>
                                     <div className="flex justify-between items-center pt-2 mt-2 border-t border-dashed border-slate-200 dark:border-slate-700">
                                         <span className="font-bold text-slate-900 dark:text-white text-lg">Total</span>
-                                        <span className="font-extrabold text-primary text-2xl">${calculateTotal().toFixed(2)}</span>
+                                        <span className="font-extrabold text-primary text-2xl">{formatCurrency(calculateTotal())}</span>
                                     </div>
                                 </div>
 

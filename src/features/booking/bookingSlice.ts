@@ -8,26 +8,14 @@ import type {
 } from "./bookingTypes";
 import { logOut } from "../auth/AuthSlice";
 
-// Load state from sessionStorage
-const loadBookingState = (): BookingState => {
-  try {
-    const saved = sessionStorage.getItem("bookingState");
-    if (saved) {
-      return JSON.parse(saved);
-    }
-  } catch (e) {
-    console.error("Failed to load booking state from sessionStorage:", e);
-  }
-  return {
-    currentBooking: null,
-    selectedSeats: [],
-    passengerData: [],
-    bookingStep: "seats",
-    bookingId: null,
-  };
+const initialState: BookingState = {
+  currentBooking: null,
+  selectedSeats: [],
+  passengerData: [],
+  bookingStep: "seats",
+  bookingId: null,
 };
 
-const initialState: BookingState = loadBookingState();
 
 const bookingSlice = createSlice({
   name: "booking",

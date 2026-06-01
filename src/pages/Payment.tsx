@@ -3,7 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../features/hooks";
 import { setCurrentPayment, setPaymentStatus } from "../features/payment/paymentSlice";
 import { createPayment, verifyPayment } from "../api/paymentApi";
+import { getBookingDetails, getMyBookings } from "../api/bookingApi";
 import { showToast } from "../features/ui/uiSlice";
+import { setCurrentBooking, setBookingId, setPassengerData, setSelectedSeats } from "../features/booking/bookingSlice";
+import type { Passenger, Seat } from "../features/booking/bookingTypes";
 
 // Declare global window interface for Snap
 declare global {
@@ -22,6 +25,7 @@ const Payment: React.FC = () => {
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<number | null>(1); // Default to BCA
   const [isProcessing, setIsProcessing] = useState(false);
   const [timeLeft, setTimeLeft] = useState(599); // 09:59
+  const [checkingStatus, setCheckingStatus] = useState(true);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -29,6 +33,100 @@ const Payment: React.FC = () => {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const checkBookingStatus = async () => {
+      try {
+        let activeBookingId = bookingId;
+
+        // If we don't have active bookingId in Redux, check database for any PENDING bookings
+        if (!activeBookingId) {
+          const response = await getMyBookings("PENDING");
+          const bookings = response.data?.data?.bookings || response.data?.bookings || [];
+          if (Array.isArray(bookings) && bookings.length > 0) {
+            // Find the latest pending booking
+            const latestPending = bookings[0];
+            activeBookingId = latestPending.id;
+          }
+        }
+
+        if (!activeBookingId) {
+          setCheckingStatus(false);
+          return;
+        }
+
+        const response = await getBookingDetails(activeBookingId);
+        const booking = response.data?.data || response.data;
+        
+        // If booking is already confirmed/paid, redirect to success!
+        if (booking.status === "CONFIRMED" || booking.paymentStatus === "PAID") {
+          dispatch(showToast({ message: "Pemesanan Anda sudah lunas!", type: "success" }));
+          navigate("/success");
+          return;
+        }
+
+        // If booking is pending and already has a payment generated, redirect to waiting-payment!
+        if (booking.status === "PENDING" && booking.payments && booking.payments.length > 0) {
+          const latestPayment = booking.payments[booking.payments.length - 1];
+          const paymentStatusUpper = latestPayment.status?.toUpperCase();
+          // Only redirect if payment is active and pending
+          if (paymentStatusUpper === "PENDING" || paymentStatusUpper === "PENDING_PAYMENT") {
+            dispatch(showToast({ message: "Anda memiliki pembayaran tertunda. Silakan selesaikan pembayaran.", type: "info" }));
+            navigate("/waiting-payment", {
+              state: {
+                bookingId: activeBookingId,
+                orderId: booking.bookingCode,
+                amount: Number(booking.totalPrice),
+                paymentType: latestPayment.method || "bank_transfer",
+                vaNumber: latestPayment.paymentCode || "",
+                bank: "Bank",
+              }
+            });
+            return;
+          }
+        }
+
+        // If it's PENDING but does NOT have a payment generated, restore states into Redux so they can pay!
+        if (booking.status === "PENDING" && (!currentBooking || !bookingId)) {
+          // Map Passengers
+          const passengers: Passenger[] = (booking.bookingDetails || []).map((detail: any) => ({
+            firstName: detail.passengerName || "",
+            lastName: detail.passengerName || "",
+            identityType: (detail.passengerIdType as "KTP" | "PASSPORT" | "SIM") || "KTP",
+            identityNumber: detail.passengerIdNumber,
+            seatNumber: detail.seatNumber,
+            age: 25,
+            phone: detail.passengerPhone,
+            email: detail.passengerEmail,
+            gender: "male",
+            nationality: "Indonesia",
+          }));
+
+          // Map Seats
+          const seats: Seat[] = (booking.bookingDetails || []).map((detail: any) => ({
+            seatNumber: detail.seatNumber,
+            row: 0,
+            position: 0,
+            isAvailable: false,
+            price: detail.price,
+            seatType: "Standard",
+          }));
+
+          dispatch(setBookingId(booking.id));
+          dispatch(setCurrentBooking(booking));
+          dispatch(setPassengerData(passengers));
+          dispatch(setSelectedSeats(seats));
+        }
+
+      } catch (error) {
+        console.error("Failed to check booking status on payment mount:", error);
+      } finally {
+        setCheckingStatus(false);
+      }
+    };
+
+    checkBookingStatus();
+  }, [bookingId, navigate, dispatch, currentBooking]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -42,6 +140,17 @@ const Payment: React.FC = () => {
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(amount);
+
+  if (checkingStatus) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 font-display text-slate-800 dark:text-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+          <p className="font-semibold text-lg text-slate-600 dark:text-slate-300">Memverifikasi status pemesanan...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentBooking || passengerData.length === 0) {
     return (
@@ -59,10 +168,10 @@ const Payment: React.FC = () => {
 
   const pricePerSeat = parseFloat(currentBooking.totalPrice);
   const subtotal = passengerData.length * pricePerSeat;
-  const serviceFee = 0;
+  const serviceFee = 5000;
   const tax = 0;
-  const discount = 0;
-  const totalAmount = subtotal + serviceFee + tax - discount;
+  const discount = 2000;
+  const totalAmount = Math.max(0, subtotal + serviceFee + tax - discount);
 
   // Map payment method IDs to method names for API
   const paymentMethodMap: Record<number, string> = {
@@ -130,10 +239,21 @@ const Payment: React.FC = () => {
             try {
               // Also trigger verification for pending to update status in DB
               await verifyPayment(result.order_id);
-              dispatch(showToast({ message: "Menunggu pembayaran...", type: "info" }));
             } catch (error) {
               console.error("Verification failed on pending:", error);
             }
+            dispatch(showToast({ message: "Menunggu pembayaran...", type: "info" }));
+            navigate("/waiting-payment", {
+              state: {
+                bookingId: bookingId,
+                snapToken: snapToken,
+                orderId: result.order_id || currentBooking?.bookingCode,
+                amount: totalAmount,
+                paymentType: result.payment_type || "bank_transfer",
+                vaNumber: result.va_numbers?.[0]?.va_number || result.bill_key || "",
+                bank: result.va_numbers?.[0]?.bank || "Bank",
+              }
+            });
           },
           onError: function (result: any) {
             console.log("Payment error:", result);
@@ -172,7 +292,7 @@ const Payment: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-[#111318] dark:text-white">Complete Your Payment</h2>
-            <p className="text-slate-500 dark:text-slate-400 mt-1">Order ID: <span className="font-mono font-medium text-primary">#882319922</span></p>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Order ID: <span className="font-mono font-medium text-primary">#{currentBooking?.bookingCode || bookingId}</span></p>
           </div>
           {/* Countdown Timer */}
           <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-4 py-2 rounded-lg border border-red-100 dark:border-red-900/30">

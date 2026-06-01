@@ -6,7 +6,12 @@ import type { Schedule } from "../features/search/searchTypes";
 import {
   setCurrentBooking,
   setBookingStep,
+  setSelectedSeats,
+  setPassengerData,
 } from "../features/booking/bookingSlice";
+import { searchSchedules } from "../api/scheduleApi";
+import { showToast } from "../features/ui/uiSlice";
+import { setCriteria, setResults, setRecommendations } from "../features/search/searchSlice";
 
 const SearchResult: React.FC = () => {
   const navigate = useNavigate();
@@ -15,7 +20,7 @@ const SearchResult: React.FC = () => {
   /* =====================
       REDUX STATE
   ===================== */
-  const { criteria, results } = useAppSelector(
+  const { criteria, results, recommendations } = useAppSelector(
     (state) => state.search
   );
 
@@ -23,6 +28,10 @@ const SearchResult: React.FC = () => {
       HANDLERS
   ===================== */
   const handleSelectSchedule = (schedule: Schedule) => {
+    // Clean any prior draft booking seats and passengers
+    dispatch(setSelectedSeats([]));
+    dispatch(setPassengerData([]));
+
     dispatch(
       setCurrentBooking({
         id: schedule.id,
@@ -34,6 +43,28 @@ const SearchResult: React.FC = () => {
 
     dispatch(setBookingStep("seats"));
     navigate("/seat");
+  };
+
+  const handleSelectAlternativeDate = async (newDate: string) => {
+    if (!criteria.origin || !criteria.destination) return;
+    dispatch(setCriteria({ date: newDate }));
+    
+    try {
+      dispatch(showToast({ message: "Mencari jadwal untuk tanggal alternatif...", type: "info" }));
+      const response = await searchSchedules({
+        date: newDate,
+        origin: criteria.origin.name,
+        destination: criteria.destination.name,
+        passengers: criteria.passengers,
+      });
+      const schedules = response.data?.data || response.data || [];
+      const recs = response.data?.recommendations || [];
+      dispatch(setResults(Array.isArray(schedules) ? schedules : []));
+      dispatch(setRecommendations(Array.isArray(recs) ? recs : []));
+    } catch (error) {
+      console.error("Alternative search failed:", error);
+      dispatch(showToast({ message: "Gagal memuat jadwal tanggal alternatif.", type: "error" }));
+    }
   };
 
   /* =====================
@@ -198,13 +229,50 @@ const SearchResult: React.FC = () => {
             </div>
 
             {results.length === 0 ? (
-              /* Empty State */
-              <div className="bg-white dark:bg-[#1a202c] rounded-xl p-8 text-center shadow-sm border border-gray-100 dark:border-gray-800">
-                <div className="size-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              /* Empty State with Alternative Date Suggestions */
+              <div className="bg-white dark:bg-[#1a202c] rounded-xl p-8 text-center shadow-sm border border-gray-100 dark:border-gray-800 animate-fade-in">
+                <div className="size-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="material-symbols-outlined text-gray-400 text-3xl">search_off</span>
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">No buses found</h3>
-                <p className="text-gray-500">Try changing your search criteria.</p>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Jadwal Bus Tidak Ditemukan</h3>
+                <p className="text-gray-500 mb-6">
+                  Maaf, kami tidak menemukan jadwal keberangkatan untuk rute ini pada tanggal <strong>{criteria.date ? new Date(criteria.date).toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' }) : "-"}</strong>.
+                </p>
+
+                {recommendations && recommendations.length > 0 ? (
+                  <div className="mt-6 border-t border-dashed border-gray-100 dark:border-gray-800 pt-6 max-w-xl mx-auto">
+                    <div className="flex items-center justify-center gap-2 text-primary dark:text-blue-400 mb-4">
+                      <span className="material-symbols-outlined text-[18px]">info</span>
+                      <h4 className="font-bold text-xs uppercase tracking-wider">Rekomendasi Hari Alternatif</h4>
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                      Tersedia keberangkatan pada tanggal lain untuk rute yang sama. Klik tanggal di bawah ini untuk mencari ulang:
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {recommendations.slice(0, 3).map((rec, rIdx) => (
+                        <button
+                          key={rIdx}
+                          onClick={() => handleSelectAlternativeDate(rec.date)}
+                          className="px-4 py-3 bg-primary/5 hover:bg-primary hover:text-white dark:bg-gray-800 dark:hover:bg-primary text-primary dark:text-white rounded-xl border border-primary/20 hover:border-primary text-sm font-bold transition-all flex flex-col items-center gap-1 cursor-pointer hover:scale-[1.02] shadow-sm"
+                        >
+                          <span className="text-xs opacity-75 font-normal">
+                            {new Date(rec.date).toLocaleDateString("id-ID", { weekday: 'short' })}
+                          </span>
+                          <span className="text-sm">
+                            {new Date(rec.date).toLocaleDateString("id-ID", { day: 'numeric', month: 'short' })}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 bg-primary/10 rounded-full font-semibold mt-1">
+                            {rec.count} Bus
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-6 border-t border-dashed border-gray-100 dark:border-gray-800 pt-6">
+                    <p className="text-sm text-gray-400 italic">Tidak ada jadwal alternatif terdaftar untuk rute ini pada hari lainnya.</p>
+                  </div>
+                )}
               </div>
             ) : (
               results.map((schedule) => (

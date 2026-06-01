@@ -32,3 +32,10 @@ export const getMyBookings = async (status?: string) => {
 export const getBookingDetails = async (id: string) => {
   return apiClient.get(`/bookings/${id}`);
 };
+
+export const cancelBooking = async (id: string) => {
+  return apiClient.patch(`/bookings/${id}/status`, {
+    status: "CANCELLED",
+    paymentStatus: "FAILED"
+  });
+};

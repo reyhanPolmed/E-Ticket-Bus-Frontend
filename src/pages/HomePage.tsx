@@ -2,14 +2,15 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { setCriteria, setResults } from "../features/search/searchSlice";
+import { setCriteria, setResults, setRecommendations } from "../features/search/searchSlice";
 import { type RootState } from "../features/store";
 import { getTerminals } from "../api/terminalApi";
 import { searchSchedules } from "../api/scheduleApi";
 import { getMyBookings, getBookingDetails } from "../api/bookingApi";
 import { showToast } from "../features/ui/uiSlice";
-import PendingBookingModal from "../components/PendingBookingModal";
-import { setCurrentBooking, setBookingId, setPassengerData, setBookingStep, setSelectedSeats } from "../features/booking/bookingSlice";
+import TerminalDropdown from "../components/TerminalDropdown";
+import TanggalKeberangkatanPicker from "../components/KalenderSelection";
+import { setCurrentBooking, setBookingId, setPassengerData, setBookingStep, setSelectedSeats, resetBooking } from "../features/booking/bookingSlice";
 import { selectCurrentUser } from "../features/auth/AuthSlice";
 import type { Booking, Seat, Passenger } from "../features/booking/bookingTypes";
 
@@ -28,9 +29,29 @@ const HomePage: React.FC = () => {
 
   // --- LOGIC: FETCH TERMINALS FROM API ---
   const isAuthenticated = useSelector(selectCurrentUser);
-  const [pendingBooking, setPendingBooking] = useState<Booking | null>(null);
-  const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
-  const [isResuming, setIsResuming] = useState(false);
+
+  // --- DRAFT BOOKING STATE ---
+  const { selectedSeats: draftSeats, currentBooking: draftBooking, bookingId: draftBookingId, bookingStep: draftStep } = useSelector((state: RootState) => state.booking);
+  const isDraftActive = draftSeats && draftSeats.length > 0 && draftBooking && !draftBookingId;
+
+  const handleResumeDraft = () => {
+    if (!draftBooking) return;
+    dispatch(showToast({ message: "Melanjutkan draf pemesanan...", type: "info" }));
+    if (draftStep === "seats") {
+      navigate("/seat");
+    } else if (draftStep === "passengers") {
+      navigate("/passenger-data");
+    } else if (draftStep === "payment" || draftStep === "confirmation") {
+      navigate("/confirmation");
+    } else {
+      navigate("/seat");
+    }
+  };
+
+  const handleDiscardDraft = () => {
+    dispatch(resetBooking());
+    dispatch(showToast({ message: "Draf pemesanan sebelumnya telah dihapus.", type: "info" }));
+  };
 
   useEffect(() => {
     const fetchTerminals = async () => {
@@ -48,89 +69,7 @@ const HomePage: React.FC = () => {
     fetchTerminals();
   }, []);
 
-  // --- LOGIC: CHECK PENDING BOOKINGS ---
-  useEffect(() => {
-    if (isAuthenticated) {
-      const checkPendingBookings = async () => {
-        try {
-          const response = await getMyBookings("PENDING");
-          console.log("response: ", response);
-          const bookings =
-            response.data?.data?.bookings ||
-            response.data?.bookings ||
-            [];
-          // Assuming API returns array, get the latest one
-          if (Array.isArray(bookings) && bookings.length > 0) {
-            // Sort by createdAt desc if needed, or take first if API orders it
-            setPendingBooking(bookings[0]);
-            setIsResumeModalOpen(true);
-          }
-        } catch (error) {
-          console.error("Failed to check pending bookings:", error);
-        }
-      };
-      checkPendingBookings();
-    }
-  }, [isAuthenticated]);
 
-  const handleContinueBooking = async () => {
-    if (!pendingBooking) return;
-    setIsResuming(true);
-    try {
-      // 1. Fetch full details
-      const response = await getBookingDetails(pendingBooking.id);
-      const fullBooking: Booking = response.data?.data || response.data;
-      console.log("Resuming booking:", fullBooking);
-
-      // 2. Map to Redux State
-      // Map Passengers
-      const passengers: Passenger[] = (fullBooking.bookingDetails || []).map(detail => ({
-        firstName: detail.passengerName || "",
-        lastName: detail.passengerName || "",
-        identityType: (detail.passengerIdType as "KTP" | "PASSPORT" | "SIM") || "KTP",
-        identityNumber: detail.passengerIdNumber,
-        seatNumber: detail.seatNumber,
-        age: 0, // Not in BookingDetail, defaulting
-        phone: detail.passengerPhone,
-        email: detail.passengerEmail,
-        gender: "male", // Defaulting
-        nationality: "ID", // Defaulting
-      }));
-
-      // Map Seats (Mocking availability since they are already booked by user)
-      const seats: Seat[] = (fullBooking.bookingDetails || []).map(detail => ({
-        seatNumber: detail.seatNumber,
-        row: 0, // Unknown
-        position: 0, // Unknown
-        isAvailable: false,
-        price: detail.price,
-        seatType: "Standard",
-      }));
-
-      // Dispatch Actions
-      dispatch(setBookingId(fullBooking.id));
-      dispatch(setCurrentBooking(fullBooking));
-      dispatch(setPassengerData(passengers));
-      dispatch(setSelectedSeats(seats));
-      dispatch(setBookingStep("payment"));
-
-      // 3. Navigate
-      navigate("/payment");
-    } catch (error) {
-      console.error("Failed to resume booking:", error);
-      dispatch(showToast({ message: "Gagal melanjutkan pemesanan.", type: "error" }));
-    } finally {
-      setIsResuming(false);
-      setIsResumeModalOpen(false);
-    }
-  };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(amount);
 
   // --- LOGIC: SEARCH VIA API ---
   const handleSearch = async (e: React.FormEvent) => {
@@ -148,7 +87,9 @@ const HomePage: React.FC = () => {
         passengers: criteria.passengers,
       });
       const schedules = response.data?.data || response.data || [];
+      const recs = response.data?.recommendations || [];
       dispatch(setResults(Array.isArray(schedules) ? schedules : []));
+      dispatch(setRecommendations(Array.isArray(recs) ? recs : []));
       console.log("result: ", response);
       navigate("/result");
     } catch (error) {
@@ -156,6 +97,50 @@ const HomePage: React.FC = () => {
       dispatch(showToast({ message: "Pencarian gagal. Silakan coba lagi.", type: "error" }));
     } finally {
       setLoading(false);
+    }
+  };
+
+  // --- LOGIC: QUICK BOOK / DEV MOCK ROUTE ---
+  const handleQuickBook = (originCity: string, destCity: string) => {
+    const originTerm = terminals.find(
+      (t) =>
+        t.city.toLowerCase().includes(originCity.toLowerCase()) ||
+        t.name.toLowerCase().includes(originCity.toLowerCase())
+    );
+    const destTerm = terminals.find(
+      (t) =>
+        t.city.toLowerCase().includes(destCity.toLowerCase()) ||
+        t.name.toLowerCase().includes(destCity.toLowerCase())
+    );
+
+    if (originTerm && destTerm) {
+      const today = new Date();
+      const formattedDate = today.toISOString().split("T")[0];
+
+      dispatch(
+        setCriteria({
+          origin: originTerm,
+          destination: destTerm,
+          date: formattedDate,
+          passengers: 1,
+        })
+      );
+
+      dispatch(
+        showToast({
+          message: `Rute diisi otomatis: ${originTerm.city} ➔ ${destTerm.city} (${formattedDate})`,
+          type: "info",
+        })
+      );
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      dispatch(
+        showToast({
+          message: `Terminal untuk kota ${originCity} ke ${destCity} belum terdaftar di database.`,
+          type: "warning",
+        })
+      );
     }
   };
 
@@ -174,35 +159,50 @@ const HomePage: React.FC = () => {
             </p>
           </div>
 
+          {/* Draft Booking Resume Card */}
+          {isDraftActive && (
+            <div className="w-full max-w-[1024px] bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl p-4 sm:p-5 shadow-lg text-white flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 animate-fade-in relative z-20">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/20 rounded-lg">
+                  <span className="material-symbols-outlined text-2xl text-white">pending_actions</span>
+                </div>
+                <div className="text-left">
+                  <h4 className="font-bold text-base">Pemesanan Belum Selesai!</h4>
+                  <p className="text-xs text-orange-50 mt-0.5">
+                    Kamu memiliki draf pemesanan dari <span className="font-bold">{draftBooking.schedule?.route?.originalTerminal?.city || "Kota Asal"}</span> ke <span className="font-bold">{draftBooking.schedule?.route?.destinationTerminal?.city || "Kota Tujuan"}</span> ({draftSeats.length} Kursi).
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <button
+                  onClick={handleResumeDraft}
+                  className="flex-1 sm:flex-none px-5 py-2 bg-white text-orange-600 font-bold rounded-lg text-xs hover:bg-orange-50 transition-colors shadow-sm whitespace-nowrap"
+                >
+                  Lanjutkan Pengisian
+                </button>
+                <button
+                  onClick={handleDiscardDraft}
+                  className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg text-xs transition-colors whitespace-nowrap border border-white/20"
+                >
+                  Hapus Draf
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Search Module */}
           <div className="w-full max-w-[1024px] bg-white rounded-xl shadow-xl p-6 sm:p-8 mt-4 border border-slate-100">
             <form className="flex flex-col lg:flex-row items-end gap-4" onSubmit={handleSearch}>
               {/* Origin Input */}
               <div className="flex-1 w-full relative group">
-                <label className="block text-sm font-bold text-gray-700 mb-2 pl-1">From</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
-                    <span className="material-symbols-outlined text-gray-400">trip_origin</span>
-                  </div>
-                  {/* Using Custom Dropdown logic but styled invisibly to match */}
-                  <select
-                    className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm transition-all appearance-none"
-                    value={criteria.origin?.id || ""}
-                    onChange={(e) => {
-                      const t = terminals.find(term => term.id === e.target.value);
-                      if (t) dispatch(setCriteria({ origin: t }));
-                    }}
-                  >
-                    <option value="" disabled>Enter origin city</option>
-                    {terminals.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                  {/* Override TerminalDropdown for this specific UI to ensure it matches the design exactly. 
-                                        Since TerminalDropdown has specific 'neobrutalist' styles (border-black, etc), 
-                                        I'll manually render a select here for the 'BusGo' theme. */}
-
-                </div>
+                <TerminalDropdown
+                  Terminals={terminals}
+                  label="From"
+                  placeholder="Enter origin city"
+                  onSelect={(t) => dispatch(setCriteria({ origin: t }))}
+                  selectedValue={criteria.origin?.id}
+                  icon="trip_origin"
+                />
               </div>
 
               {/* Swap Button */}
@@ -214,41 +214,25 @@ const HomePage: React.FC = () => {
 
               {/* Destination Input */}
               <div className="flex-1 w-full relative group">
-                <label className="block text-sm font-bold text-gray-700 mb-2 pl-1">To</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
-                    <span className="material-symbols-outlined text-gray-400">location_on</span>
-                  </div>
-                  <select
-                    className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm transition-all appearance-none"
-                    value={criteria.destination?.id || ""}
-                    onChange={(e) => {
-                      const t = terminals.find(term => term.id === e.target.value);
-                      if (t) dispatch(setCriteria({ destination: t }));
-                    }}
-                  >
-                    <option value="" disabled>Enter destination city</option>
-                    {terminals.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
+                <TerminalDropdown
+                  Terminals={terminals}
+                  label="To"
+                  placeholder="Enter destination city"
+                  onSelect={(t) => dispatch(setCriteria({ destination: t }))}
+                  selectedValue={criteria.destination?.id}
+                  icon="location_on"
+                />
               </div>
 
               {/* Date Picker */}
               <div className="w-full lg:w-48 relative group">
-                <label className="block text-sm font-bold text-gray-700 mb-2 pl-1">Departure</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
-                    <span className="material-symbols-outlined text-gray-400">calendar_month</span>
-                  </div>
-                  <input
-                    type="date"
-                    className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-lg leading-5 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm transition-all"
-                    value={criteria.date || ""}
-                    onChange={(e) => dispatch(setCriteria({ date: e.target.value }))}
-                  />
-                </div>
+                <TanggalKeberangkatanPicker
+                  value={criteria.date}
+                  onChange={(date) => {
+                    const formatted = date.toISOString().split("T")[0];
+                    dispatch(setCriteria({ date: formatted }));
+                  }}
+                />
               </div>
 
               {/* Search Button */}
@@ -259,6 +243,38 @@ const HomePage: React.FC = () => {
               </div>
             </form>
           </div>
+
+          {/* Developer Sandbox Helper Panel (Visible only in local development) */}
+          {import.meta.env.DEV && terminals.length >= 2 && (
+            <div className="w-full max-w-[1024px] mt-6 bg-slate-900 text-white rounded-xl p-5 shadow-lg border border-slate-800 animate-fade-in relative z-20">
+              <div className="flex items-center gap-2 mb-3 text-yellow-400">
+                <span className="material-symbols-outlined !text-xl animate-pulse">bug_report</span>
+                <h4 className="font-bold text-xs uppercase tracking-wider">🛠️ Developer Sandbox Helper</h4>
+              </div>
+              <p className="text-xs text-slate-300 mb-4">
+                Keterbatasan jadwal atau rute di database lokal? Gunakan rute ter-seed di bawah ini untuk langsung mengisi formulir pencarian dengan data terminal asli yang pasti membuahkan hasil:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { from: "Kampung Rambutan", to: "Leuwi Panjang", label: "Jakarta (Rambutan) ➔ Bandung" },
+                  { from: "Pulo Gebang", to: "Purabaya", label: "Jakarta (Pulo Gebang) ➔ Surabaya" },
+                  { from: "Pulo Gebang", to: "Giwangan", label: "Jakarta (Pulo Gebang) ➔ Yogyakarta" },
+                  { from: "Cicaheum", to: "Purabaya", label: "Bandung (Cicaheum) ➔ Surabaya" },
+                  { from: "Purabaya", to: "Mengwi", label: "Surabaya ➔ Bali (Denpasar)" }
+                ].map((route, oIdx) => (
+                  <button
+                    key={oIdx}
+                    type="button"
+                    onClick={() => handleQuickBook(route.from, route.to)}
+                    className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-950 text-xs font-bold text-slate-200 rounded-lg border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer hover:scale-[1.02]"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">play_arrow</span>
+                    {route.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -310,10 +326,10 @@ const HomePage: React.FC = () => {
           <div className="flex flex-col sm:flex-row justify-between items-end mb-8 gap-4">
             <div>
               <h2 className="text-3xl font-bold text-[#111318] mb-2">Popular Routes</h2>
-              <p className="text-gray-600">Explore our most traveled destinations at unbeatable prices.</p>
+              <p className="text-gray-600">Jelajahi rute terpopuler dengan harga terbaik dan pesan dalam sekali klik.</p>
             </div>
-            <a className="text-primary font-semibold flex items-center hover:underline group" href="#">
-              View all routes
+            <a className="text-primary font-semibold flex items-center hover:underline group" href="#" onClick={(e) => { e.preventDefault(); handleQuickBook("Jakarta", "Bandung"); }}>
+              Quick Book Jakarta ➔ Bandung
               <span className="material-symbols-outlined ml-1 group-hover:translate-x-1 transition-transform text-sm">arrow_forward</span>
             </a>
           </div>
@@ -322,27 +338,30 @@ const HomePage: React.FC = () => {
             <div className="group rounded-xl overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col">
               <div className="h-48 overflow-hidden relative">
                 <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-primary shadow-sm z-10">
-                  From $25
+                  Rp 120.000
                 </div>
                 <div className="w-full h-full bg-cover bg-center group-hover:scale-105 transition-transform duration-500" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDSsQy5ChLDtqhe4x3OLsHelkuB-8yYhnf3oLqvWbGc0v-M7CD5TUM84SuXetaQbnTi_1iPBRJzIANDP-R6TFkIvne624voStK5S_JWrGsKfNd6m809vsCJ9dXjLupgs4Yest4OLFOFFSn6ekKvXd71BPXHiGWTpugxDpVUZdVlwX2ssKP8K1jYkx2iu1UYHLEusSUbvYXKhhFta7kLlXxRQC7N0isx4EvQ2QWaTf6A5gvdtyv293gjvLlrJ1pHnAmI-REjIDjfyOV_")' }}></div>
               </div>
               <div className="p-5 flex-1 flex flex-col">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-lg text-gray-900">New York</h3>
+                  <h3 className="font-bold text-lg text-gray-900">Jakarta</h3>
                   <span className="material-symbols-outlined text-gray-300">arrow_forward</span>
-                  <h3 className="font-bold text-lg text-gray-900">Boston</h3>
+                  <h3 className="font-bold text-lg text-gray-900">Bandung</h3>
                 </div>
                 <div className="flex items-center gap-4 text-sm text-gray-500 mb-6">
                   <div className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-base">schedule</span>
-                    4h 30m
+                    3j 00m
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-base">directions_bus</span>
-                    Direct
+                    Direct Route
                   </div>
                 </div>
-                <button className="mt-auto w-full py-2.5 rounded-lg border border-primary text-primary font-bold hover:bg-primary hover:text-white transition-colors">
+                <button
+                  onClick={() => handleQuickBook("Jakarta", "Bandung")}
+                  className="mt-auto w-full py-2.5 rounded-lg border border-primary text-primary font-bold hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                >
                   Book Now
                 </button>
               </div>
@@ -352,27 +371,30 @@ const HomePage: React.FC = () => {
             <div className="group rounded-xl overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col">
               <div className="h-48 overflow-hidden relative">
                 <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-primary shadow-sm z-10">
-                  From $30
+                  Rp 120.000
                 </div>
                 <div className="w-full h-full bg-cover bg-center group-hover:scale-105 transition-transform duration-500" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuC5BGnHiPTbdCVvO9HJrKykSBvyWb00Ur2RIPa5-kzMwCvG_E4aLPmPnG2hAT2_4PZr-8WjevhfXiK69ZcHq28mqk0fJhO9WaGuJxfNMuLkai33ebTSd9WPWoXgAnWFLYCdDZLcQuFhN-QAW93riBzNTRccEyPc8NkS39tDV8hhRtkfepf0bxdYWinLeBAv-tkWrLCKBK9fmDXy0ODrFESDuVrv_DfOTNs9T6X48qbB4wQf0f1wyNO6rKhTiraidz5QZ7Co2dhqkMWT")' }}></div>
               </div>
               <div className="p-5 flex-1 flex flex-col">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-lg text-gray-900">Los Angeles</h3>
+                  <h3 className="font-bold text-lg text-gray-900">Bandung</h3>
                   <span className="material-symbols-outlined text-gray-300">arrow_forward</span>
-                  <h3 className="font-bold text-lg text-gray-900">Las Vegas</h3>
+                  <h3 className="font-bold text-lg text-gray-900">Jakarta</h3>
                 </div>
                 <div className="flex items-center gap-4 text-sm text-gray-500 mb-6">
                   <div className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-base">schedule</span>
-                    5h 15m
+                    3j 00m
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-base">directions_bus</span>
-                    Direct
+                    Direct Route
                   </div>
                 </div>
-                <button className="mt-auto w-full py-2.5 rounded-lg border border-primary text-primary font-bold hover:bg-primary hover:text-white transition-colors">
+                <button
+                  onClick={() => handleQuickBook("Bandung", "Jakarta")}
+                  className="mt-auto w-full py-2.5 rounded-lg border border-primary text-primary font-bold hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                >
                   Book Now
                 </button>
               </div>
@@ -382,27 +404,30 @@ const HomePage: React.FC = () => {
             <div className="group rounded-xl overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col">
               <div className="h-48 overflow-hidden relative">
                 <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-primary shadow-sm z-10">
-                  From $20
+                  Rp 250.000
                 </div>
                 <div className="w-full h-full bg-cover bg-center group-hover:scale-105 transition-transform duration-500" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCw2DKE9FOIv-r1Hoz53dzPM-zscV2h8a7uPfT5M_3FSm75pBmbZx6QK5AIphow9hioNaEQ0Ud4T_0DFZQrhBQPUvFVctX6bjhb_VVIt-4P_IE36LkqSHOzc6nVE75eFL4BYALsb0OKRxFsljcCKeLHM1i1OKqhnd4RKC0ysjpLm84A0Y92BtM_z1kJr3Vo1dbMyM7hQrbm0HwVCzhx0co_x3IvPtt0Nn_4aDmzgvWVhwFnU7F2Ih6feIvKvsEQktxbUY_nP5B_-hwd")' }}></div>
               </div>
               <div className="p-5 flex-1 flex flex-col">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-lg text-gray-900">Chicago</h3>
+                  <h3 className="font-bold text-lg text-gray-900">Jakarta</h3>
                   <span className="material-symbols-outlined text-gray-300">arrow_forward</span>
-                  <h3 className="font-bold text-lg text-gray-900">Detroit</h3>
+                  <h3 className="font-bold text-lg text-gray-900">Yogyakarta</h3>
                 </div>
                 <div className="flex items-center gap-4 text-sm text-gray-500 mb-6">
                   <div className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-base">schedule</span>
-                    4h 45m
+                    7j 30m
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-base">directions_bus</span>
-                    1 Stop
+                    AC Executive
                   </div>
                 </div>
-                <button className="mt-auto w-full py-2.5 rounded-lg border border-primary text-primary font-bold hover:bg-primary hover:text-white transition-colors">
+                <button
+                  onClick={() => handleQuickBook("Jakarta", "Yogyakarta")}
+                  className="mt-auto w-full py-2.5 rounded-lg border border-primary text-primary font-bold hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                >
                   Book Now
                 </button>
               </div>
@@ -426,18 +451,7 @@ const HomePage: React.FC = () => {
         </div>
       </div>
 
-      <PendingBookingModal
-        isOpen={isResumeModalOpen}
-        onContinue={handleContinueBooking}
-        onDiscard={() => setIsResumeModalOpen(false)}
-        isLoading={isResuming}
-        bookingInfo={pendingBooking ? {
-          origin: pendingBooking.schedule?.route?.originalTerminal?.name || "Unknown",
-          destination: pendingBooking.schedule?.route?.destinationTerminal?.name || "Unknown",
-          totalPrice: formatCurrency(Number(pendingBooking.totalPrice)),
-          passengers: pendingBooking.totalPassengers || 1,
-        } : null}
-      />
+
     </div>
   );
 };

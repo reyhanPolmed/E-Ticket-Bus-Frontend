@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Check,
   MapPin,
@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAppSelector, useAppDispatch } from "../features/hooks";
-import { setBookingStep, setBookingId } from "../features/booking/bookingSlice";
-import { createBooking } from "../api/bookingApi";
+import { setBookingStep, setBookingId, setCurrentBooking } from "../features/booking/bookingSlice";
+import { createBooking, getMyBookings, getBookingDetails } from "../api/bookingApi";
 import { showToast } from "../features/ui/uiSlice";
 
 const BookingConfirmation: React.FC = () => {
@@ -26,6 +26,81 @@ const BookingConfirmation: React.FC = () => {
 
   const { criteria } = useAppSelector((state) => state.search);
   const { selectedSeats, passengerData, currentBooking } = useAppSelector((state) => state.booking);
+  const [checkingStatus, setCheckingStatus] = useState(true);
+
+  useEffect(() => {
+    const verifyBookingGuard = async () => {
+      try {
+        // 1. Check if user has a pending booking in database
+        const response = await getMyBookings("PENDING");
+        const bookings = response.data?.data?.bookings || response.data?.bookings || [];
+        if (Array.isArray(bookings) && bookings.length > 0) {
+          const pendingBooking = bookings[0];
+          dispatch(showToast({ 
+            message: "Kamu memiliki pemesanan yang belum dibayar. Selesaikan pembayaran terlebih dahulu.", 
+            type: "warning" 
+          }));
+
+          const detailsRes = await getBookingDetails(pendingBooking.id);
+          const bookingDetails = detailsRes.data?.data || detailsRes.data;
+
+          if (bookingDetails.payments && bookingDetails.payments.length > 0) {
+            const latestPayment = bookingDetails.payments[bookingDetails.payments.length - 1];
+            const paymentStatusUpper = latestPayment.status?.toUpperCase();
+            if (paymentStatusUpper === "PENDING" || paymentStatusUpper === "PENDING_PAYMENT") {
+              navigate("/waiting-payment", {
+                state: {
+                  bookingId: pendingBooking.id,
+                  orderId: bookingDetails.bookingCode,
+                  amount: Number(bookingDetails.totalPrice),
+                  paymentType: latestPayment.method || "bank_transfer",
+                  vaNumber: latestPayment.paymentCode || "",
+                  bank: "Bank",
+                }
+              });
+              return;
+            }
+          }
+          navigate("/payment");
+          return;
+        }
+
+        // 2. Check if active draft exists in Redux (must have selected schedule, seats, passenger data)
+        if (!currentBooking) {
+          dispatch(showToast({ 
+            message: "Silakan pilih rute dan jadwal bus terlebih dahulu.", 
+            type: "warning" 
+          }));
+          navigate("/");
+          return;
+        }
+
+        if (selectedSeats.length === 0) {
+          dispatch(showToast({ 
+            message: "Silakan pilih kursi terlebih dahulu.", 
+            type: "warning" 
+          }));
+          navigate("/seat");
+          return;
+        }
+
+        if (passengerData.length === 0) {
+          dispatch(showToast({ 
+            message: "Silakan isi data penumpang terlebih dahulu.", 
+            type: "warning" 
+          }));
+          navigate("/passenger-data");
+          return;
+        }
+      } catch (error) {
+        console.error("Guard check failed in BookingConfirmation:", error);
+      } finally {
+        setCheckingStatus(false);
+      }
+    };
+
+    verifyBookingGuard();
+  }, [currentBooking, selectedSeats, passengerData, navigate, dispatch]);
 
   // Price Calculation
   const basePricePerSeat = parseFloat(currentBooking?.totalPrice || "40000");
@@ -58,6 +133,7 @@ const BookingConfirmation: React.FC = () => {
       });
       const bookingData = response.data?.data || response.data;
       dispatch(setBookingId(bookingData.id || bookingData._id));
+      dispatch(setCurrentBooking(bookingData));
       dispatch(setBookingStep("payment"));
       navigate("/payment");
     } catch (error: any) {
@@ -77,8 +153,18 @@ const BookingConfirmation: React.FC = () => {
   };
 
   // If no booking data, redirect home
-  if (selectedSeats.length === 0) {
-    navigate("/");
+  if (checkingStatus) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 font-display text-slate-800 dark:text-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+          <p className="font-semibold text-lg text-slate-600 dark:text-slate-300">Memverifikasi status pemesanan...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedSeats.length === 0 || !currentBooking || passengerData.length === 0) {
     return null;
   }
 
@@ -153,7 +239,7 @@ const BookingConfirmation: React.FC = () => {
                     <h2 className="text-2xl font-bold text-[#111318] mb-1">
                       {criteria.origin?.name || "Origin"} to {criteria.destination?.name || "Destination"}
                     </h2>
-                    <p className="text-gray-500 text-sm font-medium">Express Line Bus • AC Sleeper (2+1)</p>
+                    <p className="text-gray-500 text-sm font-medium">{currentBooking?.schedule?.bus?.busNumber || "Express Voyager"} • {currentBooking?.schedule?.bus?.busType || "Premium Class"}</p>
                   </div>
                   <div className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
                     {criteria.date ? new Date(criteria.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : "Date"}
@@ -165,7 +251,7 @@ const BookingConfirmation: React.FC = () => {
                   {/* Desktop Connector Line */}
                   <div className="hidden md:block absolute top-[26px] left-[15%] right-[15%] h-[2px] bg-gray-200 -z-0">
                     <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-gray-400 text-xs font-medium">
-                      5h 30m duration
+                      {currentBooking?.schedule?.route?.estimatedDuration || "—"} duration
                     </div>
                   </div>
 
@@ -175,7 +261,7 @@ const BookingConfirmation: React.FC = () => {
                       <Bus className="text-gray-600" size={24} />
                     </div>
                     <div className="md:text-center md:w-full">
-                      <p className="text-xl font-bold text-[#111318]">08:00 AM</p>
+                      <p className="text-xl font-bold text-[#111318]">{currentBooking?.schedule?.departureTime || "—"}</p>
                       <p className="text-sm text-gray-500 font-medium">
                         {criteria.origin?.name || "Terminal A"}
                       </p>
@@ -188,7 +274,7 @@ const BookingConfirmation: React.FC = () => {
                       <MapPin className="text-primary" size={24} />
                     </div>
                     <div className="md:text-right md:w-full md:order-first">
-                      <p className="text-xl font-bold text-[#111318]">01:30 PM</p>
+                      <p className="text-xl font-bold text-[#111318]">{currentBooking?.schedule?.arrivalTime || "—"}</p>
                       <p className="text-sm text-gray-500 font-medium">
                         {criteria.destination?.name || "Terminal B"}
                       </p>

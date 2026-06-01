@@ -35,7 +35,7 @@ const Header: React.FC = () => {
                 <div className="flex flex-1 justify-end gap-8">
                     <div className="hidden md:flex items-center gap-9">
                         <Link className="text-[#111318] hover:text-primary transition-colors text-sm font-medium leading-normal" to="/">Home</Link>
-                        <Link className="text-[#111318] hover:text-primary transition-colors text-sm font-medium leading-normal" to="#">Manage Booking</Link>
+                        <Link className="text-[#111318] hover:text-primary transition-colors text-sm font-medium leading-normal" to="/history">Manage Booking</Link>
                         <Link className="text-[#111318] hover:text-primary transition-colors text-sm font-medium leading-normal" to="#">Help</Link>
                     </div>
                     {isAuthenticated && user ? (

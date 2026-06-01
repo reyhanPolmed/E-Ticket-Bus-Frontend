@@ -8,7 +8,9 @@ import BookingConfirmation from "./pages/BookingConfirmation";
 import Payments from "./pages/Payment";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import WaitingPayment from "./pages/WaitingPayment";
 import BookingSuccess from "./pages/BookingSuccess";
+import BookingHistory from "./pages/BookingHistory";
 import RequireAuth from "./components/RequireAuth";
 import Toast from "./components/Toast";
 
@@ -23,6 +25,8 @@ const PrivateRoutes = () => {
           <Route path="/passenger-data" element={<PassengerInfo />} />
           <Route path="/confirmation" element={<BookingConfirmation />} />
           <Route path="/payment" element={<Payments />} />
+          <Route path="/waiting-payment" element={<WaitingPayment />} />
+          <Route path="/history" element={<BookingHistory />} />
           <Route path="/success" element={<BookingSuccess />} />
         </Route>
       </Routes>
